@@ -13,6 +13,9 @@ before_install:
 
 script:
   - nix-build default.nix --argstr compiler $GHC_VERSION
+  - result/bin/blog build
+  - cd _site
+  - ls
 
 cache:
   timeout: 300
