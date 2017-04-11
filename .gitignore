@@ -1,0 +1,10 @@
+dist
+result
+*.[ao]
+*.hi
+
+hakyll
+*.draft.md
+posts/drafts
+_cache
+_site
