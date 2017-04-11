@@ -19,7 +19,7 @@ script:
 
 after_script:
   - export REMOTE=$(git config remote.origin.url | sed 's/.*:\/\///')
-  - git clone ${REMOTE}
+  - git clone https://${REMOTE}
   - cp _site/* maxow.github.io/ -r
   - cd maxow.github.io
   - git config --global user.email "$GIT_EMAIL"
