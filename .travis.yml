@@ -17,7 +17,7 @@ script:
   - cd _site
   - ls
 
-cache:
-  timeout: 300
-  directories:
-    - /nix
+#cache:
+#  timeout: 300
+#  directories:
+#    - /nix
