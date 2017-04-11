@@ -1,0 +1,20 @@
+language: nix
+env:
+  - GHC_VERSION=ghc802
+
+before_install:
+  - >
+      if ! echo "$TRAVIS_COMMIT_MESSAGE" \
+         | grep -qvE  '\[(skip travis|travis skip)\]'
+      then
+        echo "[skip travis] has been found, exiting."
+        exit
+      fi
+
+script:
+  - nix-build default.nix --argstr compiler $GHC_VERSION
+
+cache:
+  timeout: 300
+  directories:
+    - /nix
