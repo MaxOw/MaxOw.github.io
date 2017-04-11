@@ -12,5 +12,5 @@ mkDerivation {
   isLibrary = false;
   isExecutable = true;
   executableHaskellDepends = [ base hakyll pandoc ];
-  license = stdenv.lib.licenses.unfree;
+  license = stdenv.lib.licenses.bsd3;
 }
