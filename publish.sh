@@ -9,4 +9,4 @@ git remote add github https://${GH_TOKEN}@${REMOTE}
 git add --all
 git status
 git commit -m "Built by Travis ( build nr $TRAVIS_BUILD_NUMBER )"
-git push github master:master | grep -v http
+git push github master:master &>/dev/null
