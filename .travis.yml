@@ -1,6 +1,8 @@
 language: nix
 env:
-  - GHC_VERSION=ghc802
+  global:
+    - GHC_VERSION=ghc802
+    secure: lnK24DyY19h4FrbT2bqfomx1I1aPuUZNomN+pChxpPmhdQwcaZsqAKHUOGAxyBSu3KZQRQGMZWQgjuWzm1qRAH/0eL9Lx2s7MFPjlVull6Nu8xhUhOc1/Kon00gKfCaBmz9ohsOmvQfsOt17eSXBd669bDY18xvC/AykGDm+r64vt6vqwQrX5oRt5/+uur1zy/Nk1RIA05Tn/37xF7KaWMdDQuTl+2qakPK7if50l/haymWjN95gMyxN2owHAXntoF0Rzy9h6H4ZGuMjTKHjx9LY13hw3lbnvLl23fWYol93ohBK1u938q6cIw1COQHF/eeSb0ee09mL8SAgjl2g94sCWOJdkRXdtB+wNIQajeeS5yadN7Bx66zkf2i5P/XWvWaT4zbYStw0e4epqCmo6pPLaGkynMZYh53NiLVDYmYdqEE7unYUQQmUM5h16KYq956Gs+zIfelXs5+Y50By5R8poPopi6rPRHaD18LD+JAHNNu2BFBdXoAit0hx8rhr0NItWSA5L7q4qhHT2aJVqIOe3rLdlClsa4HvU87dHXpH5Irw7PbMKbu9rylMifcRX5gcPIu6WPzzQIZZswQWVZrsC97hcvR6cchUghNzCIbWTGnlMupy5HAmJ17r9zZfVT0OdgdeZXeyQDPblsAj54YKUIq47eMT2cK0yd6qDn0=
 
 before_install:
   - >
@@ -14,8 +16,17 @@ before_install:
 script:
   - nix-build default.nix --argstr compiler $GHC_VERSION
   - result/bin/blog build
+
+after_script:
+  - git config --global user.email "$GIT_EMAIL"
+  - git config --global user.name  "$GIT_NAME"
   - cd _site
-  - ls
+  - export REMOTE=$(git config remote.origin.url | sed 's/.*:\/\///')
+  - git remote add github https://${GH_TOKEN}@{REMOTE}
+  - git add --all
+  - git status
+  - git commit -m "Built by Travis ( build nr $TRAVIS_BUILD_NUMBER )"
+  - git push github master:master | grep -v http
 
 #cache:
 #  timeout: 300
