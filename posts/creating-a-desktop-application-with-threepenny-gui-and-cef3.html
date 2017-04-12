@@ -67,7 +67,7 @@
 <p>Recently I’ve had a bit of a problem maintaining motivation when working on one of my projects. To overcome the stopping force of procrastination I decided to try a new strategy: setup a 4.5 hours work sessions where 1.5 hours is a <em>break budget</em> and the other 3 hours are an <em>actual honest to god work</em>. I needed a way to keep track of a work session time and since I wasn’t able to find anything useful on the internet (I haven’t searched very hard to be honest) I decided to write one myself (as you do; or rather as happens to people who have been exposed to the harmful radiation of computer processors for far too many years). Coincidentally such an application was small and neat enough to use as an example for the <a href="https://github.com/haskell-ui/cef3-raw">CEF3 bindings</a> I have recently finished.</p>
 <p>So yeah, in this post I’m going to describe building such an application.</p>
 <p>Lets start with a specification: Generally speaking it’s going to be very minimalistic and simple; just a list of timers that you can start/stop and reset. Keeping with the Unix tradition of unhelpfully short names we’ll name our little program <strong>tmr</strong>. Additionally we’ll add an option to specify different configuration of timers through the command line arguments using <a href="https://hackage.haskell.org/package/optparse-applicative">optparse-applicative</a>.</p>
-<p>Here is how it will going to look like:</p>
+<p>Here is how it will look like:</p>
 <div class="figure">
 <img src="../images/tmr.png" />
 
