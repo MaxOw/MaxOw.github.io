@@ -27,7 +27,7 @@ our little program **tmr**. Additionally we'll add an option to specify
 different configuration of timers through the command line arguments using
 [optparse-applicative].
 
-Here is how it will going to look like:
+Here is how it will look like:
 
 ![][tmr]
 
@@ -425,16 +425,7 @@ version of cef (and making the binding generation automatic to make it easier
 to keep it up to date).  Creating a better high level abstractions like
 mentioned above support for multi-window applications or off-screen rendering
 to use with opengl, for example in a gamedev setup (frankly that was the
-initial motivation for me to work on this bindings). Putting time into it
-however means taking time from my other projects or from working on things that
-actually pay rent. Therefor I have created a [Bountysource campaign] for this
-project so If you'd like to support me you can go there. I still will be
-working on it either way, but some support could definitely help.
-
-Thanks.
-
-Now go forth and make your own creations and let me know if you build anything
-with it.
+initial motivation for me to work on this bindings).
 
 [cef3-raw]: https://github.com/haskell-ui/cef3-raw
 [tmr]: /images/tmr.png
@@ -450,5 +441,4 @@ with it.
 [default.nix]: https://github.com/haskell-ui/cef3-example/blob/31110661f2480c9d54a65e5ca0737ce1a1e1a092/default.nix
 [Appveyor]: https://www.appveyor.com/
 [tmr.7z]: https://ci.appveyor.com/api/buildjobs/9m5e9g00tuto21lw/artifacts/result/tmr.7z
-[Bountysource campaign]: https://salt.bountysource.com/teams/haskell-ui
 
