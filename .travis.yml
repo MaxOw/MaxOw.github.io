@@ -15,6 +15,7 @@ before_install:
 
 script:
   - nix-build default.nix --argstr compiler $GHC_VERSION
+  - nix-env -iA nixpkgs.texlive.combined.scheme-full
   - result/bin/blog build
 
 after_script:

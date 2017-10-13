@@ -4,7 +4,8 @@ result
 *.hi
 
 hakyll
-*.draft.md
+*.draft*
+*.ignore
 posts/drafts
 _cache
 _site

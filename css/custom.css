@@ -61,6 +61,14 @@ nav ul li a:focus {
     */
 }
 
+@media print {
+    @page { size: auto;  margin: 0mm; }
+    /* @page :first { size: auto;  margin: 0mm; } */
+    /* @page :last { size: auto;  margin: 0mm; } */
+    .sidebar { display: none !important; }
+    .content-block, div, img { page-break-inside: avoid; }
+}
+
 /* Non 960 */
 @media only screen and (max-width: 959px) {
     #logo {
@@ -161,7 +169,7 @@ div > pre.sourceCode {
 }
 
 code {
-    font-family: monospace;
+    font-family: "DejaVu Sans Mono", "Inconsolata", monospace;
 }
 
 p code {
