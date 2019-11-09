@@ -58,7 +58,7 @@
             <li><a href="../">Home</a></li>
             <li><a href="../posts.html">Posts</a></li>
             <li><a href="https://github.com/MaxOw">Github</a></li>
-            <li><a href="../cv.html">Hire Me</a></li>
+            <li><a href="../hireme.html">Hire Me</a></li>
         </ul>
     </nav>
     &nbsp;
@@ -67,215 +67,212 @@
 <div class="twelve columns offset-by-one content">
     <h2 id="creating-a-desktop-application-with-threepenny-gui-and-cef3">Creating a Desktop Application with Threepenny-GUI and CEF3</h2>
 <hr />
-<p>Recently I've had a bit of a problem maintaining motivation when working on one of my projects. To overcome the stopping force of procrastination I decided to try a new strategy: setup a 4.5 hours work sessions where 1.5 hours is a <em>break budget</em> and the other 3 hours are an <em>actual honest to god work</em>. I needed a way to keep track of a work session time and since I wasn't able to find anything useful on the internet (I haven't searched very hard to be honest) I decided to write one myself (as you do; or rather as happens to people who have been exposed to the harmful radiation of computer processors for far too many years). Coincidentally such an application was small and neat enough to use as an example for the <a href="https://github.com/haskell-ui/cef3-raw">CEF3 bindings</a> I have recently finished.</p>
-<p>So yeah, in this post I'm going to describe building such an application.</p>
-<p>Lets start with a specification: Generally speaking it's going to be very minimalistic and simple; just a list of timers that you can start/stop and reset. Keeping with the Unix tradition of unhelpfully short names we'll name our little program <strong>tmr</strong>. Additionally we'll add an option to specify different configuration of timers through the command line arguments using <a href="https://hackage.haskell.org/package/optparse-applicative">optparse-applicative</a>.</p>
+<p>Recently I’ve had a bit of a problem maintaining motivation when working on one of my projects. To overcome the stopping force of procrastination I decided to try a new strategy: setup a 4.5 hours work sessions where 1.5 hours is a <em>break budget</em> and the other 3 hours are an <em>actual honest to god work</em>. I needed a way to keep track of a work session time and since I wasn’t able to find anything useful on the internet (I haven’t searched very hard to be honest) I decided to write one myself (as you do; or rather as happens to people who have been exposed to the harmful radiation of computer processors for far too many years). Coincidentally such an application was small and neat enough to use as an example for the <a href="https://github.com/haskell-ui/cef3-raw">CEF3 bindings</a> I have recently finished.</p>
+<p>So yeah, in this post I’m going to describe building such an application.</p>
+<p>Lets start with a specification: Generally speaking it’s going to be very minimalistic and simple; just a list of timers that you can start/stop and reset. Keeping with the Unix tradition of unhelpfully short names we’ll name our little program <strong>tmr</strong>. Additionally we’ll add an option to specify different configuration of timers through the command line arguments using <a href="https://hackage.haskell.org/package/optparse-applicative">optparse-applicative</a>.</p>
 <p>Here is how it will look like:</p>
-<div class="figure">
-<img src="../images/tmr.png" />
-
-</div>
-<p>Now before we start let me lay down my assumptions about the target audience of this post: I assume knowledge of Haskell, so I will not explain the basics. I will be using <a href="https://hackage.haskell.org/package/optparse-applicative">optparse-applicative</a> and <a href="https://hackage.haskell.org/package/threepenny-gui">threepenny-gui</a> but I will not go in depth explaining everything about these libraries or things like FRP, etc. I will, instead, just give a high-level overview of what I'm doing as there are already much better tutorials and guides for these libraries on the web. This is, in contrast, more of a general writeup of creating a small, simple, desktop application in Haskell from start to finish.</p>
-<p>One additional thing that I need to add before we proceed: I will not be going through every single line of code in this post only the essential/interesting bits. If there is something missing that you'd like to see you can look it up in <a href="https://github.com/haskell-ui/cef3-example">the source repo on github</a>. Specifically this post is based on revision <a href="https://github.com/haskell-ui/cef3-example/tree/31110661f2480c9d54a65e5ca0737ce1a1e1a092">3111066</a>.</p>
+<p><img src="../images/tmr.png" /></p>
+<p>Now before we start let me lay down my assumptions about the target audience of this post: I assume knowledge of Haskell, so I will not explain the basics. I will be using <a href="https://hackage.haskell.org/package/optparse-applicative">optparse-applicative</a> and <a href="https://hackage.haskell.org/package/threepenny-gui">threepenny-gui</a> but I will not go in depth explaining everything about these libraries or things like FRP, etc. I will, instead, just give a high-level overview of what I’m doing as there are already much better tutorials and guides for these libraries on the web. This is, in contrast, more of a general writeup of creating a small, simple, desktop application in Haskell from start to finish.</p>
+<p>One additional thing that I need to add before we proceed: I will not be going through every single line of code in this post only the essential/interesting bits. If there is something missing that you’d like to see you can look it up in <a href="https://github.com/haskell-ui/cef3-example">the source repo on github</a>. Specifically this post is based on revision <a href="https://github.com/haskell-ui/cef3-example/tree/31110661f2480c9d54a65e5ca0737ce1a1e1a092">3111066</a>.</p>
 <p>OK, so with that out of the way let us get on with it.</p>
 <h3 id="parsing-command-line-options">Parsing command line options</h3>
 <p>We start with creating a record of options that we will parse from command line arguments. These being a port number for threepenny server and list of timers with time and color each.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">newtype</span> <span class="dt">Timer</span> <span class="fu">=</span> <span class="dt">Timer</span> <span class="dt">NominalDiffTime</span>
-<span class="kw">data</span> <span class="dt">TimerSetup</span> <span class="fu">=</span> <span class="dt">TimerSetup</span>
-   {<span class="ot"> timerTime  ::</span> <span class="dt">Timer</span>
-   ,<span class="ot"> timerColor ::</span> <span class="dt">Color</span>
-   }
-
-<span class="kw">data</span> <span class="dt">Options</span> <span class="fu">=</span> <span class="dt">Options</span>
-   {<span class="ot"> optionPort   ::</span> <span class="dt">Int</span>
-   ,<span class="ot"> optionTimers ::</span> [<span class="dt">TimerSetup</span>]
-   }</code></pre></div>
-<p>Next lets create a parser. <a href="https://hackage.haskell.org/package/optparse-applicative">optparse-applicative</a> makes it straightforward to such an extent that it's hard to really write anything useful here without making it sound like I'm just quoting the <a href="https://hackage.haskell.org/package/optparse-applicative-0.13.2.0/docs/Options-Applicative-Builder.html">documentation</a>.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">optParser ::</span> <span class="dt">Parser</span> <span class="dt">Options</span>
-optParser <span class="fu">=</span> <span class="dt">Options</span>
-    <span class="fu">&lt;$&gt;</span> optPort
-    <span class="fu">&lt;*&gt;</span> optTimerList
-    <span class="kw">where</span>
-    optPort <span class="fu">=</span> option auto <span class="fu">$</span> mconcat
-        [ short <span class="ch">'p'</span>
-        , long <span class="st">&quot;port&quot;</span>
-        , showDefault
-        , value <span class="dv">8099</span>
-        , metavar <span class="st">&quot;PORT&quot;</span>
-        , help <span class="st">&quot;Server port&quot;</span>
-        ]</code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">newtype</span> <span class="dt">Timer</span> <span class="ot">=</span> <span class="dt">Timer</span> <span class="dt">NominalDiffTime</span></span>
+<span id="cb1-2"><a href="#cb1-2"></a><span class="kw">data</span> <span class="dt">TimerSetup</span> <span class="ot">=</span> <span class="dt">TimerSetup</span></span>
+<span id="cb1-3"><a href="#cb1-3"></a>   {<span class="ot"> timerTime  ::</span> <span class="dt">Timer</span></span>
+<span id="cb1-4"><a href="#cb1-4"></a>   ,<span class="ot"> timerColor ::</span> <span class="dt">Color</span></span>
+<span id="cb1-5"><a href="#cb1-5"></a>   }</span>
+<span id="cb1-6"><a href="#cb1-6"></a></span>
+<span id="cb1-7"><a href="#cb1-7"></a><span class="kw">data</span> <span class="dt">Options</span> <span class="ot">=</span> <span class="dt">Options</span></span>
+<span id="cb1-8"><a href="#cb1-8"></a>   {<span class="ot"> optionPort   ::</span> <span class="dt">Int</span></span>
+<span id="cb1-9"><a href="#cb1-9"></a>   ,<span class="ot"> optionTimers ::</span> [<span class="dt">TimerSetup</span>]</span>
+<span id="cb1-10"><a href="#cb1-10"></a>   }</span></code></pre></div>
+<p>Next lets create a parser. <a href="https://hackage.haskell.org/package/optparse-applicative">optparse-applicative</a> makes it straightforward to such an extent that it’s hard to really write anything useful here without making it sound like I’m just quoting the <a href="https://hackage.haskell.org/package/optparse-applicative-0.13.2.0/docs/Options-Applicative-Builder.html">documentation</a>.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb2-1"><a href="#cb2-1"></a><span class="ot">optParser ::</span> <span class="dt">Parser</span> <span class="dt">Options</span></span>
+<span id="cb2-2"><a href="#cb2-2"></a>optParser <span class="ot">=</span> <span class="dt">Options</span></span>
+<span id="cb2-3"><a href="#cb2-3"></a>    <span class="op">&lt;$&gt;</span> optPort</span>
+<span id="cb2-4"><a href="#cb2-4"></a>    <span class="op">&lt;*&gt;</span> optTimerList</span>
+<span id="cb2-5"><a href="#cb2-5"></a>    <span class="kw">where</span></span>
+<span id="cb2-6"><a href="#cb2-6"></a>    optPort <span class="ot">=</span> option auto <span class="op">$</span> <span class="fu">mconcat</span></span>
+<span id="cb2-7"><a href="#cb2-7"></a>        [ short <span class="ch">'p'</span></span>
+<span id="cb2-8"><a href="#cb2-8"></a>        , long <span class="st">&quot;port&quot;</span></span>
+<span id="cb2-9"><a href="#cb2-9"></a>        , showDefault</span>
+<span id="cb2-10"><a href="#cb2-10"></a>        , value <span class="dv">8099</span></span>
+<span id="cb2-11"><a href="#cb2-11"></a>        , metavar <span class="st">&quot;PORT&quot;</span></span>
+<span id="cb2-12"><a href="#cb2-12"></a>        , help <span class="st">&quot;Server port&quot;</span></span>
+<span id="cb2-13"><a href="#cb2-13"></a>        ]</span></code></pre></div>
 <p>As I said this part is pretty much self-explanatory. We declare everything we need, short and long names of parameters etc. for each individual field and build the resulting record by applicatively composing the sub-parsers. Lets focus on parsing the timers:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">    optTimerList <span class="fu">=</span> parseTimers <span class="fu">&lt;$&gt;</span> many optTimer
-    optTimer <span class="fu">=</span> strOption <span class="fu">$</span> mconcat
-        [ short <span class="ch">'t'</span>
-        , long <span class="st">&quot;timer&quot;</span>
-        , metavar <span class="st">&quot;TIME(;COLOR)&quot;</span>
-        , helpDoc (<span class="dt">Just</span> timerHelp) ]</code></pre></div>
-<p>We handle this by expecting list (<code>many</code>) of string options and then passing result of that to a <code>parseTimers</code> function that will parse our more specific format. Alternatively we could use the <code>option</code> function with a dedicated reader (i.e. <code>option (eitherReader parseTimer)</code>) but this way we'll be able to handle defaulting of colors from a palette a little bit easier.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">parseTimers ::</span> [<span class="dt">String</span>] <span class="ot">-&gt;</span> [<span class="dt">TimerSetup</span>]
-parseTimers <span class="fu">=</span> setDefault <span class="fu">.</span> catMaybes <span class="fu">.</span> zipWith parseSetup palette
-    <span class="kw">where</span>
-    setDefault [] <span class="fu">=</span>
-        [ parseSetupUnsafe <span class="st">&quot;3:00:00;#00b5ad&quot;</span>
-        , parseSetupUnsafe <span class="st">&quot;1:30:00;#e67b9e&quot;</span> ]
-    setDefault as <span class="fu">=</span> as
-
-<span class="ot">parseSetup ::</span> <span class="dt">Color</span> <span class="ot">-&gt;</span> <span class="dt">String</span> <span class="ot">-&gt;</span> <span class="dt">Maybe</span> <span class="dt">TimerSetup</span>
-parseSetup defaultColor setup <span class="fu">=</span> <span class="kw">case</span> splitOn <span class="st">&quot;;&quot;</span> setup <span class="kw">of</span>
-    [time, color] <span class="ot">-&gt;</span> <span class="dt">TimerSetup</span> <span class="fu">&lt;$&gt;</span> parseTime time <span class="fu">&lt;*&gt;</span> parseColor color
-    [time]        <span class="ot">-&gt;</span> <span class="dt">TimerSetup</span> <span class="fu">&lt;$&gt;</span> parseTime time <span class="fu">&lt;*&gt;</span> pure defaultColor
-    _             <span class="ot">-&gt;</span> <span class="dt">Nothing</span></code></pre></div>
-<p>Finally we parse each format string defaulting the colors where it's necessary to ones in a palette (which is simply an infinite cycle of predefined colors).</p>
-<p><em>Note: erroneous format strings for timers are silently ignored and in the case where there are no timers specified we get the default two described in the prologue, which can cause a surprising situation for an unsuspecting user. I should probably fix that but I couldn't really be bothered.</em></p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">getOptions ::</span> <span class="dt">IO</span> <span class="dt">Options</span>
-getOptions <span class="fu">=</span> execParser optionsParserInfo
-
-<span class="ot">optionsParserInfo ::</span> <span class="dt">ParserInfo</span> <span class="dt">Options</span>
-optionsParserInfo <span class="fu">=</span> info (optParser <span class="fu">&lt;**&gt;</span> helper) <span class="fu">$</span> mconcat
-    [ fullDesc, progDesc description
-    , footerDoc <span class="fu">$</span> <span class="dt">Just</span> explanation ]</code></pre></div>
-<p>Lastly we create a <code>ParserInfo</code> which handles all of the help messaging and pack it up into a nice and handy <code>getOptions</code> function that executes the parser. Lets test what we've written so far by displaying the help message: stylistic</p>
-<div class="sourceCode"><pre class="sourceCode latex"><code class="sourceCode latex">&gt; tmr --help
-Usage: tmr [-p|--port PORT] [-t|--timer TIME(;COLOR)]
-  Starts the timer board with specified timers
-
-Available options:
-  -p,--port PORT           Server port (default: 8099)
-  -t,--timer TIME(;COLOR)  Timer startup string of format hh:mm:ss and
-                           optional color name or hex color code, ie. #0ba
-                           For example:
-                             --timer 10:03:00 -t 0:5:0;red
-                             --timer 00:03:00;#e67b9e
-  -h,--help                Show this help text
-
-When run without any timers specified the default will be:
-  tmr --timer 3:00:00;#00b5ad
-      --timer 1:30:00;#e67b9e</code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb3-1"><a href="#cb3-1"></a>    optTimerList <span class="ot">=</span> parseTimers <span class="op">&lt;$&gt;</span> many optTimer</span>
+<span id="cb3-2"><a href="#cb3-2"></a>    optTimer <span class="ot">=</span> strOption <span class="op">$</span> <span class="fu">mconcat</span></span>
+<span id="cb3-3"><a href="#cb3-3"></a>        [ short <span class="ch">'t'</span></span>
+<span id="cb3-4"><a href="#cb3-4"></a>        , long <span class="st">&quot;timer&quot;</span></span>
+<span id="cb3-5"><a href="#cb3-5"></a>        , metavar <span class="st">&quot;TIME(;COLOR)&quot;</span></span>
+<span id="cb3-6"><a href="#cb3-6"></a>        , helpDoc (<span class="dt">Just</span> timerHelp) ]</span></code></pre></div>
+<p>We handle this by expecting list (<code>many</code>) of string options and then passing result of that to a <code>parseTimers</code> function that will parse our more specific format. Alternatively we could use the <code>option</code> function with a dedicated reader (i.e. <code>option (eitherReader parseTimer)</code>) but this way we’ll be able to handle defaulting of colors from a palette a little bit easier.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb4-1"><a href="#cb4-1"></a><span class="ot">parseTimers ::</span> [<span class="dt">String</span>] <span class="ot">-&gt;</span> [<span class="dt">TimerSetup</span>]</span>
+<span id="cb4-2"><a href="#cb4-2"></a>parseTimers <span class="ot">=</span> setDefault <span class="op">.</span> catMaybes <span class="op">.</span> <span class="fu">zipWith</span> parseSetup palette</span>
+<span id="cb4-3"><a href="#cb4-3"></a>    <span class="kw">where</span></span>
+<span id="cb4-4"><a href="#cb4-4"></a>    setDefault [] <span class="ot">=</span></span>
+<span id="cb4-5"><a href="#cb4-5"></a>        [ parseSetupUnsafe <span class="st">&quot;3:00:00;#00b5ad&quot;</span></span>
+<span id="cb4-6"><a href="#cb4-6"></a>        , parseSetupUnsafe <span class="st">&quot;1:30:00;#e67b9e&quot;</span> ]</span>
+<span id="cb4-7"><a href="#cb4-7"></a>    setDefault as <span class="ot">=</span> as</span>
+<span id="cb4-8"><a href="#cb4-8"></a></span>
+<span id="cb4-9"><a href="#cb4-9"></a><span class="ot">parseSetup ::</span> <span class="dt">Color</span> <span class="ot">-&gt;</span> <span class="dt">String</span> <span class="ot">-&gt;</span> <span class="dt">Maybe</span> <span class="dt">TimerSetup</span></span>
+<span id="cb4-10"><a href="#cb4-10"></a>parseSetup defaultColor setup <span class="ot">=</span> <span class="kw">case</span> splitOn <span class="st">&quot;;&quot;</span> setup <span class="kw">of</span></span>
+<span id="cb4-11"><a href="#cb4-11"></a>    [time, color] <span class="ot">-&gt;</span> <span class="dt">TimerSetup</span> <span class="op">&lt;$&gt;</span> parseTime time <span class="op">&lt;*&gt;</span> parseColor color</span>
+<span id="cb4-12"><a href="#cb4-12"></a>    [time]        <span class="ot">-&gt;</span> <span class="dt">TimerSetup</span> <span class="op">&lt;$&gt;</span> parseTime time <span class="op">&lt;*&gt;</span> <span class="fu">pure</span> defaultColor</span>
+<span id="cb4-13"><a href="#cb4-13"></a>    _             <span class="ot">-&gt;</span> <span class="dt">Nothing</span></span></code></pre></div>
+<p>Finally we parse each format string defaulting the colors where it’s necessary to ones in a palette (which is simply an infinite cycle of predefined colors).</p>
+<p><em>Note: erroneous format strings for timers are silently ignored and in the case where there are no timers specified we get the default two described in the prologue, which can cause a surprising situation for an unsuspecting user. I should probably fix that but I couldn’t really be bothered.</em></p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb5-1"><a href="#cb5-1"></a><span class="ot">getOptions ::</span> <span class="dt">IO</span> <span class="dt">Options</span></span>
+<span id="cb5-2"><a href="#cb5-2"></a>getOptions <span class="ot">=</span> execParser optionsParserInfo</span>
+<span id="cb5-3"><a href="#cb5-3"></a></span>
+<span id="cb5-4"><a href="#cb5-4"></a><span class="ot">optionsParserInfo ::</span> <span class="dt">ParserInfo</span> <span class="dt">Options</span></span>
+<span id="cb5-5"><a href="#cb5-5"></a>optionsParserInfo <span class="ot">=</span> info (optParser <span class="op">&lt;**&gt;</span> helper) <span class="op">$</span> <span class="fu">mconcat</span></span>
+<span id="cb5-6"><a href="#cb5-6"></a>    [ fullDesc, progDesc description</span>
+<span id="cb5-7"><a href="#cb5-7"></a>    , footerDoc <span class="op">$</span> <span class="dt">Just</span> explanation ]</span></code></pre></div>
+<p>Lastly we create a <code>ParserInfo</code> which handles all of the help messaging and pack it up into a nice and handy <code>getOptions</code> function that executes the parser. Lets test what we’ve written so far by displaying the help message: stylistic</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode latex"><code class="sourceCode latex"><span id="cb6-1"><a href="#cb6-1"></a>&gt; tmr --help</span>
+<span id="cb6-2"><a href="#cb6-2"></a>Usage: tmr [-p|--port PORT] [-t|--timer TIME(;COLOR)]</span>
+<span id="cb6-3"><a href="#cb6-3"></a>  Starts the timer board with specified timers</span>
+<span id="cb6-4"><a href="#cb6-4"></a></span>
+<span id="cb6-5"><a href="#cb6-5"></a>Available options:</span>
+<span id="cb6-6"><a href="#cb6-6"></a>  -p,--port PORT           Server port (default: 8099)</span>
+<span id="cb6-7"><a href="#cb6-7"></a>  -t,--timer TIME(;COLOR)  Timer startup string of format hh:mm:ss and</span>
+<span id="cb6-8"><a href="#cb6-8"></a>                           optional color name or hex color code, ie. #0ba</span>
+<span id="cb6-9"><a href="#cb6-9"></a>                           For example:</span>
+<span id="cb6-10"><a href="#cb6-10"></a>                             --timer 10:03:00 -t 0:5:0;red</span>
+<span id="cb6-11"><a href="#cb6-11"></a>                             --timer 00:03:00;#e67b9e</span>
+<span id="cb6-12"><a href="#cb6-12"></a>  -h,--help                Show this help text</span>
+<span id="cb6-13"><a href="#cb6-13"></a></span>
+<span id="cb6-14"><a href="#cb6-14"></a>When run without any timers specified the default will be:</span>
+<span id="cb6-15"><a href="#cb6-15"></a>  tmr --timer 3:00:00;#00b5ad</span>
+<span id="cb6-16"><a href="#cb6-16"></a>      --timer 1:30:00;#e67b9e</span></code></pre></div>
 <h3 id="building-the-gui">Building the GUI</h3>
-<p>Let us start with creating the timer widget as that's the central part of <strong>tmr</strong>.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">setupTimer ::</span> <span class="dt">Event</span> <span class="dt">Tick</span> <span class="ot">-&gt;</span> <span class="dt">TimerSetup</span> <span class="ot">-&gt;</span> <span class="dt">UI</span> <span class="dt">Element</span>
-setupTimer tickEvent (<span class="dt">TimerSetup</span> time color) <span class="fu">=</span> <span class="kw">do</span>
-    buttonStart <span class="ot">&lt;-</span> View.buttonStart
-    buttonReset <span class="ot">&lt;-</span> View.buttonReset
-    buttonGroup <span class="ot">&lt;-</span> View.buttonGroup [ buttonStart, buttonReset ]
-
-    displayText <span class="ot">&lt;-</span> View.displayText ( showTimer time )
-    display     <span class="ot">&lt;-</span> View.display displayText
-
-    content     <span class="ot">&lt;-</span> View.content (toPct color <span class="dv">100</span>) [ display, buttonGroup ]
-    segment     <span class="ot">&lt;-</span> View.segment content</code></pre></div>
+<p>Let us start with creating the timer widget as that’s the central part of <strong>tmr</strong>.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb7-1"><a href="#cb7-1"></a><span class="ot">setupTimer ::</span> <span class="dt">Event</span> <span class="dt">Tick</span> <span class="ot">-&gt;</span> <span class="dt">TimerSetup</span> <span class="ot">-&gt;</span> <span class="dt">UI</span> <span class="dt">Element</span></span>
+<span id="cb7-2"><a href="#cb7-2"></a>setupTimer tickEvent (<span class="dt">TimerSetup</span> time color) <span class="ot">=</span> <span class="kw">do</span></span>
+<span id="cb7-3"><a href="#cb7-3"></a>    buttonStart <span class="ot">&lt;-</span> View.buttonStart</span>
+<span id="cb7-4"><a href="#cb7-4"></a>    buttonReset <span class="ot">&lt;-</span> View.buttonReset</span>
+<span id="cb7-5"><a href="#cb7-5"></a>    buttonGroup <span class="ot">&lt;-</span> View.buttonGroup [ buttonStart, buttonReset ]</span>
+<span id="cb7-6"><a href="#cb7-6"></a></span>
+<span id="cb7-7"><a href="#cb7-7"></a>    displayText <span class="ot">&lt;-</span> View.displayText ( showTimer time )</span>
+<span id="cb7-8"><a href="#cb7-8"></a>    display     <span class="ot">&lt;-</span> View.display displayText</span>
+<span id="cb7-9"><a href="#cb7-9"></a></span>
+<span id="cb7-10"><a href="#cb7-10"></a>    content     <span class="ot">&lt;-</span> View.content (toPct color <span class="dv">100</span>) [ display, buttonGroup ]</span>
+<span id="cb7-11"><a href="#cb7-11"></a>    segment     <span class="ot">&lt;-</span> View.segment content</span></code></pre></div>
 <p>The function takes two arguments: a stream of timer tick events, and our configuration record <code>TimerSetup</code> with a time to measure and a color of the timer. We create a stop/start button and a reset button and put all of the layout in place. As you can see I have elected to banish all of the display particularities into the <code>View</code> module as to not muddy the readability of the logic. As that module is not particularly interesting (it is basically a few named html elements with selected number of <a href="https://semantic-ui.com">semantic-ui</a> classes) I will not be quoting it here. You can check the details in the <a href="https://github.com/haskell-ui/cef3-example/blob/31110661f2480c9d54a65e5ca0737ce1a1e1a092/src/View.hs">source repo</a>.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">    eActive <span class="ot">&lt;-</span> accumE <span class="dt">False</span> <span class="fu">$</span> unionWith const
-        (not         <span class="fu">&lt;$</span> UI.click buttonStart)
-        (const <span class="dt">False</span> <span class="fu">&lt;$</span> UI.click buttonReset)
-    onEvent eActive <span class="fu">$</span> \<span class="kw">case</span>
-        <span class="dt">True</span>  <span class="ot">-&gt;</span> pure buttonStart <span class="fu">#</span> set text <span class="st">&quot;Stop&quot;</span>
-        <span class="dt">False</span> <span class="ot">-&gt;</span> pure buttonStart <span class="fu">#</span> set text <span class="st">&quot;Start&quot;</span></code></pre></div>
-<p>We collect start/stop and reset buttons click events with a left-biased merge (<code>unionWith const</code>) we assume that user cannot really click both buttons at once so bias doesn't really matter. Next we accumulate the events into the active state event and change the button label based on that state.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">    bActive <span class="ot">&lt;-</span> stepper <span class="dt">False</span> eActive
-    eTimer <span class="ot">&lt;-</span> accumE time <span class="fu">$</span> unionWith const
-        (const time  <span class="fu">&lt;$</span>  UI.click buttonReset)
-        (updateTimer <span class="fu">&lt;$&gt;</span> whenE bActive tickEvent)
-    onEvent eTimer <span class="fu">$</span> \timerState <span class="ot">-&gt;</span> <span class="kw">do</span>
-        pure displayText <span class="fu">#</span> set text (showTimer timerState)
-        <span class="kw">let</span> pct <span class="fu">=</span> toPct color <span class="fu">$</span> calcPct time timerState
-        pure content <span class="fu">#</span> set style pct
-
-    return segment</code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb8-1"><a href="#cb8-1"></a>    eActive <span class="ot">&lt;-</span> accumE <span class="dt">False</span> <span class="op">$</span> unionWith <span class="fu">const</span></span>
+<span id="cb8-2"><a href="#cb8-2"></a>        (<span class="fu">not</span>         <span class="op">&lt;$</span> UI.click buttonStart)</span>
+<span id="cb8-3"><a href="#cb8-3"></a>        (<span class="fu">const</span> <span class="dt">False</span> <span class="op">&lt;$</span> UI.click buttonReset)</span>
+<span id="cb8-4"><a href="#cb8-4"></a>    onEvent eActive <span class="op">$</span> \<span class="kw">case</span></span>
+<span id="cb8-5"><a href="#cb8-5"></a>        <span class="dt">True</span>  <span class="ot">-&gt;</span> <span class="fu">pure</span> buttonStart <span class="op">#</span> set text <span class="st">&quot;Stop&quot;</span></span>
+<span id="cb8-6"><a href="#cb8-6"></a>        <span class="dt">False</span> <span class="ot">-&gt;</span> <span class="fu">pure</span> buttonStart <span class="op">#</span> set text <span class="st">&quot;Start&quot;</span></span></code></pre></div>
+<p>We collect start/stop and reset buttons click events with a left-biased merge (<code>unionWith const</code>) we assume that user cannot really click both buttons at once so bias doesn’t really matter. Next we accumulate the events into the active state event and change the button label based on that state.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb9-1"><a href="#cb9-1"></a>    bActive <span class="ot">&lt;-</span> stepper <span class="dt">False</span> eActive</span>
+<span id="cb9-2"><a href="#cb9-2"></a>    eTimer <span class="ot">&lt;-</span> accumE time <span class="op">$</span> unionWith <span class="fu">const</span></span>
+<span id="cb9-3"><a href="#cb9-3"></a>        (<span class="fu">const</span> time  <span class="op">&lt;$</span>  UI.click buttonReset)</span>
+<span id="cb9-4"><a href="#cb9-4"></a>        (updateTimer <span class="op">&lt;$&gt;</span> whenE bActive tickEvent)</span>
+<span id="cb9-5"><a href="#cb9-5"></a>    onEvent eTimer <span class="op">$</span> \timerState <span class="ot">-&gt;</span> <span class="kw">do</span></span>
+<span id="cb9-6"><a href="#cb9-6"></a>        <span class="fu">pure</span> displayText <span class="op">#</span> set text (showTimer timerState)</span>
+<span id="cb9-7"><a href="#cb9-7"></a>        <span class="kw">let</span> pct <span class="ot">=</span> toPct color <span class="op">$</span> calcPct time timerState</span>
+<span id="cb9-8"><a href="#cb9-8"></a>        <span class="fu">pure</span> content <span class="op">#</span> set style pct</span>
+<span id="cb9-9"><a href="#cb9-9"></a></span>
+<span id="cb9-10"><a href="#cb9-10"></a>    <span class="fu">return</span> segment</span></code></pre></div>
 <p>Similarly we collect the reset and timer tick events and display the timer text and gradient. Finally we return the segment element that is the root of the widget.</p>
 <h3 id="putting-it-all-together">Putting it all together</h3>
-<p>So we have created the options parsing module and the central Timer widget, now let's put it all together.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">main ::</span> <span class="dt">IO</span> ()
-main <span class="fu">=</span> handleSubProcess <span class="fu">$</span> <span class="kw">do</span>
-    opts <span class="ot">&lt;-</span> getOptions
-    startServer opts
-    startBrowserUrl <span class="fu">$</span> <span class="st">&quot;http://127.0.0.1:&quot;</span> <span class="fu">++</span> show (optionPort opts)</code></pre></div>
+<p>So we have created the options parsing module and the central Timer widget, now let’s put it all together.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb10-1"><a href="#cb10-1"></a><span class="ot">main ::</span> <span class="dt">IO</span> ()</span>
+<span id="cb10-2"><a href="#cb10-2"></a>main <span class="ot">=</span> handleSubProcess <span class="op">$</span> <span class="kw">do</span></span>
+<span id="cb10-3"><a href="#cb10-3"></a>    opts <span class="ot">&lt;-</span> getOptions</span>
+<span id="cb10-4"><a href="#cb10-4"></a>    startServer opts</span>
+<span id="cb10-5"><a href="#cb10-5"></a>    startBrowserUrl <span class="op">$</span> <span class="st">&quot;http://127.0.0.1:&quot;</span> <span class="op">++</span> <span class="fu">show</span> (optionPort opts)</span></code></pre></div>
 <p>The <code>getOptions</code> function we are familiar with already and <code>startServer</code> is where we setup the threepenny server and we will get to that soon enough. For now let me just explain the other things that are going on here;</p>
 <p>Since <a href="https://github.com/haskell-ui/cef3-raw">cef3-raw</a> is a one-to-one mapping to the cef3 capi which is quite low level and not very straightforward I have created a <a href="https://github.com/haskell-ui/cef3-simple">cef3-simple</a> package that will contain some higher level implementation for some common tasks. <code>handleSubProcess</code> and <code>startBrowserUrl</code> are two of them. Because cef3 is build with this multi-process design, we have to take care of that and this is what <code>handleSubProcess</code> does. It recognizes cef3 subprocesses and deals with them. Finally <code>startBrowserUrl</code> does what it says on the label; starts the browser window and loads the specified url which in this case is localhost on the port selected in options.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">startServer ::</span> <span class="dt">Options</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
-startServer opts <span class="fu">=</span> <span class="kw">do</span>
-    ep <span class="ot">&lt;-</span> dropFileName <span class="fu">&lt;$&gt;</span> getExecutablePath
-    <span class="kw">let</span> config <span class="fu">=</span> defaultConfig
-            { jsPort   <span class="fu">=</span> <span class="dt">Just</span> <span class="fu">$</span> optionPort opts
-            , jsStatic <span class="fu">=</span> <span class="dt">Just</span> <span class="fu">$</span> ep <span class="fu">++</span> <span class="st">&quot;/static&quot;</span>  }
-    tickEvent <span class="ot">&lt;-</span> newTickEvent
-    void <span class="fu">$</span> forkIO <span class="fu">$</span> startGUI config <span class="fu">$</span> setup tickEvent (optionTimers opts)
-
-<span class="ot">setup ::</span> <span class="dt">Event</span> <span class="dt">Tick</span> <span class="ot">-&gt;</span> [<span class="dt">TimerSetup</span>] <span class="ot">-&gt;</span> <span class="dt">Window</span> <span class="ot">-&gt;</span> <span class="dt">UI</span> ()
-setup tickEvent timerSetups win <span class="fu">=</span> <span class="kw">do</span>
-    UI.addStyleSheet win <span class="st">&quot;semantic.min.css&quot;</span>
-    timers <span class="ot">&lt;-</span> mapM (setupTimer tickEvent) timerSetups
-    void <span class="fu">$</span> getBody win <span class="fu">#+</span> [ View.centerGrid timers ]</code></pre></div>
-<p>We add a style sheet, create the timers, attach them to the body, and that's it.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb11-1"><a href="#cb11-1"></a><span class="ot">startServer ::</span> <span class="dt">Options</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()</span>
+<span id="cb11-2"><a href="#cb11-2"></a>startServer opts <span class="ot">=</span> <span class="kw">do</span></span>
+<span id="cb11-3"><a href="#cb11-3"></a>    ep <span class="ot">&lt;-</span> dropFileName <span class="op">&lt;$&gt;</span> getExecutablePath</span>
+<span id="cb11-4"><a href="#cb11-4"></a>    <span class="kw">let</span> config <span class="ot">=</span> defaultConfig</span>
+<span id="cb11-5"><a href="#cb11-5"></a>            { jsPort   <span class="ot">=</span> <span class="dt">Just</span> <span class="op">$</span> optionPort opts</span>
+<span id="cb11-6"><a href="#cb11-6"></a>            , jsStatic <span class="ot">=</span> <span class="dt">Just</span> <span class="op">$</span> ep <span class="op">++</span> <span class="st">&quot;/static&quot;</span>  }</span>
+<span id="cb11-7"><a href="#cb11-7"></a>    tickEvent <span class="ot">&lt;-</span> newTickEvent</span>
+<span id="cb11-8"><a href="#cb11-8"></a>    void <span class="op">$</span> forkIO <span class="op">$</span> startGUI config <span class="op">$</span> setup tickEvent (optionTimers opts)</span>
+<span id="cb11-9"><a href="#cb11-9"></a></span>
+<span id="cb11-10"><a href="#cb11-10"></a><span class="ot">setup ::</span> <span class="dt">Event</span> <span class="dt">Tick</span> <span class="ot">-&gt;</span> [<span class="dt">TimerSetup</span>] <span class="ot">-&gt;</span> <span class="dt">Window</span> <span class="ot">-&gt;</span> <span class="dt">UI</span> ()</span>
+<span id="cb11-11"><a href="#cb11-11"></a>setup tickEvent timerSetups win <span class="ot">=</span> <span class="kw">do</span></span>
+<span id="cb11-12"><a href="#cb11-12"></a>    UI.addStyleSheet win <span class="st">&quot;semantic.min.css&quot;</span></span>
+<span id="cb11-13"><a href="#cb11-13"></a>    timers <span class="ot">&lt;-</span> <span class="fu">mapM</span> (setupTimer tickEvent) timerSetups</span>
+<span id="cb11-14"><a href="#cb11-14"></a>    void <span class="op">$</span> getBody win <span class="op">#+</span> [ View.centerGrid timers ]</span></code></pre></div>
+<p>We add a style sheet, create the timers, attach them to the body, and that’s it.</p>
 <p><em>Note: there is a bit of subtlety here; we fork starting the server and later on we will immediately load the page in cef. This could potentially explode if the cef starts before the server. I will have to investigate if that could be the case, but for now be wary of this.</em></p>
 <h3 id="building-it-with-nix">Building it with Nix</h3>
-<p>If you are developing in Haskell and do not use <strong>nix</strong> you are doing it wrong - I mean you should use it in general, I'm writing this currently from a <strong>NixOS</strong> machine and it is a blast - but especially for Haskell the support there is magical. I still remember times when I dreaded installing bigger packages like lens out of fear of multi hour build times that could possibly break half way through. With <strong>nix</strong> you either wait like half a minute to download pre-compiled binaries from cache or if you have already used that package in some other project and have it in your store, you're good to go immediately.</p>
-<p>So if you don't have it, drop this into your shell:</p>
+<p>If you are developing in Haskell and do not use <strong>nix</strong> you are doing it wrong - I mean you should use it in general, I’m writing this currently from a <strong>NixOS</strong> machine and it is a blast - but especially for Haskell the support there is magical. I still remember times when I dreaded installing bigger packages like lens out of fear of multi hour build times that could possibly break half way through. With <strong>nix</strong> you either wait like half a minute to download pre-compiled binaries from cache or if you have already used that package in some other project and have it in your store, you’re good to go immediately.</p>
+<p>So if you don’t have it, drop this into your shell:</p>
 <blockquote>
 <p>curl https://nixos.org/nix/install | sh</p>
 </blockquote>
-<p>Once you've installed nix you'll need <code>cabal2nix</code> (which you can install with <code>nix-env</code>) to generate nix configuration from your cabal file.</p>
+<p>Once you’ve installed nix you’ll need <code>cabal2nix</code> (which you can install with <code>nix-env</code>) to generate nix configuration from your cabal file.</p>
 <blockquote>
 <p>cabal2nix . &gt; cef3-example.nix</p>
 </blockquote>
-<p>If you have any static resources that you need to add to the resulting binary you can do this in a <code>postInstall</code> hook in the resulting nix file. You will also need to link to the libcef locales directory there. In the future I'll add a path to <a href="https://github.com/haskell-ui/cef3-simple">cef3-simple</a> to not require that but for now:</p>
-<div class="sourceCode"><pre class="sourceCode nix"><code class="sourceCode bash">  <span class="ex">postInstall</span> = <span class="st">''</span>
-    <span class="fu">mkdir</span> -p <span class="va">$out</span>/bin/static/css
-    <span class="fu">mv</span> resources/semantic.min.css <span class="va">$out</span>/bin/static/css/
-    <span class="fu">ln</span> -s <span class="va">${libcef3}</span>/bin/locales <span class="va">$out</span>/bin/
-  <span class="st">''</span>;</code></pre></div>
+<p>If you have any static resources that you need to add to the resulting binary you can do this in a <code>postInstall</code> hook in the resulting nix file. You will also need to link to the libcef locales directory there. In the future I’ll add a path to <a href="https://github.com/haskell-ui/cef3-simple">cef3-simple</a> to not require that but for now:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode nix"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1"></a>  <span class="ex">postInstall</span> = <span class="st">''</span></span>
+<span id="cb12-2"><a href="#cb12-2"></a>    <span class="fu">mkdir</span> -p <span class="va">$out</span>/bin/static/css</span>
+<span id="cb12-3"><a href="#cb12-3"></a>    <span class="fu">mv</span> resources/semantic.min.css <span class="va">$out</span>/bin/static/css/</span>
+<span id="cb12-4"><a href="#cb12-4"></a>    <span class="fu">ln</span> -s <span class="va">${libcef3}</span>/bin/locales <span class="va">$out</span>/bin/</span>
+<span id="cb12-5"><a href="#cb12-5"></a>  <span class="st">''</span>;</span></code></pre></div>
 <p>Finally you need to create a <code>default.nix</code> file:</p>
-<div class="sourceCode"><pre class="sourceCode nix"><code class="sourceCode bash"><span class="kw">{</span> <span class="ex">nixpkgs</span> ? import <span class="op">&lt;</span>nixpkgs<span class="op">&gt;</span> <span class="dt">{}</span>, compiler ? <span class="st">&quot;ghc802&quot;</span> <span class="kw">}</span>:
-<span class="ex">nixpkgs.haskell.packages.</span><span class="va">${compiler}</span>.callPackage ./cef3-example.nix { }</code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode nix"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1"></a><span class="kw">{</span> <span class="ex">nixpkgs</span> ? import <span class="op">&lt;</span>nixpkgs<span class="op">&gt;</span> {<span class="kw">}</span>, <span class="ex">compiler</span> ? <span class="st">&quot;ghc802&quot;</span> }:</span>
+<span id="cb13-2"><a href="#cb13-2"></a><span class="ex">nixpkgs.haskell.packages.</span><span class="va">${compiler}</span>.callPackage ./cef3-example.nix { }</span></code></pre></div>
 <p>Then you run <code>nix-build</code> and bobs your uncle.</p>
 <p>Now that will be the case once I publish <strong>cef3-raw</strong> and <strong>cef3-simple</strong> to hackage and push the <code>libcef3.nix</code> to nixpkgs. For now <code>default.nix</code> needs to be a bit more elaborate as you can see <a href="https://github.com/haskell-ui/cef3-example/blob/31110661f2480c9d54a65e5ca0737ce1a1e1a092/default.nix">here</a>.</p>
 <h3 id="bonus-building-and-releasing-it-on-windows">Bonus: Building and releasing it on Windows</h3>
-<p>As much as I'm a fan of Linux, it still so happens that there are plenty of users I'd like to share my software with, who use <del>a wrong OS</del> Windows.</p>
-<p>So let me describe here the script I'm using to build and deploy this project with <a href="https://www.appveyor.com/">Appveyor</a>:</p>
-<div class="sourceCode"><pre class="sourceCode bash"><code class="sourceCode bash"><span class="ex">environment</span>:
-  <span class="ex">global</span>:
-    <span class="ex">STACK_ROOT</span>: C:\sr
-
-<span class="ex">install</span>:
-  <span class="ex">-</span> git submodule update --init --recursive
-  <span class="ex">-</span> curl -s -ostack.zip -L --insecure http://www.stackage.org/stack/windows-x86_64
-  <span class="ex">-</span> 7z x stack.zip stack.exe <span class="op">&gt;</span> NUL
-  <span class="ex">-</span> set PATH=%PATH%<span class="kw">;</span><span class="ex">C</span>:\Stack
-  <span class="ex">-</span> mkdir C:\Stack
-  <span class="ex">-</span> move stack.exe C:\Stack\
-  - .\cef3-simple\cef3-raw\scripts\setup.bat</code></pre></div>
-<p>Since I have not yet published the <a href="https://github.com/haskell-ui/cef3-raw">cef3-raw</a> on hackage I have it as a submodule for now, and thats why the first line of that script is needed, since appveyor doesn't clone the repo recursively. Afterwords we install stack and add it to PATH. Finally we run the setup script for cef3-raw that downloads the pre-build cef3 dlls.</p>
-<div class="sourceCode"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span class="fu">build_script:</span>
-  <span class="kw">-</span> stack setup --skip-msys --no-terminal &gt; NUL
-  <span class="kw">-</span> cd cef3-simple\cef3-raw
-  <span class="kw">-</span> .\scripts\configure.bat
-  <span class="kw">-</span> cd ..\..
-  <span class="kw">-</span> stack install</code></pre></div>
-<p>Build script is mostly straightforward. We setup stack, run a configure script of cef3-raw to point it to where we've installed the cef library with the setup script and than be build the whole thing.</p>
-<div class="sourceCode"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span class="fu">after_build:</span>
-  <span class="kw">-</span> md result\static\css
-  <span class="kw">-</span> xcopy /E /Q %CEF3_PATH%\Release\* result\
-  <span class="kw">-</span> xcopy /E /Q %CEF3_PATH%\Resources\* result\
-  <span class="kw">-</span> xcopy /Q %APPDATA%\local\bin\tmr.exe result\
-  <span class="kw">-</span> xcopy /Q resources\semantic.min.css result\static\css
-  <span class="kw">-</span> dir result
-  <span class="kw">-</span> cd result
-  <span class="kw">-</span> 7z a tmr.7z *
-  <span class="kw">-</span> 7z a tmr-exe.7z tmr.exe</code></pre></div>
+<p>As much as I’m a fan of Linux, it still so happens that there are plenty of users I’d like to share my software with, who use <del>a wrong OS</del> Windows.</p>
+<p>So let me describe here the script I’m using to build and deploy this project with <a href="https://www.appveyor.com/">Appveyor</a>:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1"></a><span class="ex">environment</span>:</span>
+<span id="cb14-2"><a href="#cb14-2"></a>  <span class="ex">global</span>:</span>
+<span id="cb14-3"><a href="#cb14-3"></a>    <span class="ex">STACK_ROOT</span>: C:\sr</span>
+<span id="cb14-4"><a href="#cb14-4"></a></span>
+<span id="cb14-5"><a href="#cb14-5"></a><span class="ex">install</span>:</span>
+<span id="cb14-6"><a href="#cb14-6"></a>  <span class="ex">-</span> git submodule update --init --recursive</span>
+<span id="cb14-7"><a href="#cb14-7"></a>  <span class="ex">-</span> curl -s -ostack.zip -L --insecure http://www.stackage.org/stack/windows-x86_64</span>
+<span id="cb14-8"><a href="#cb14-8"></a>  <span class="ex">-</span> 7z x stack.zip stack.exe <span class="op">&gt;</span> NUL</span>
+<span id="cb14-9"><a href="#cb14-9"></a>  <span class="ex">-</span> set PATH=%PATH%<span class="kw">;</span><span class="ex">C</span>:\Stack</span>
+<span id="cb14-10"><a href="#cb14-10"></a>  <span class="ex">-</span> mkdir C:\Stack</span>
+<span id="cb14-11"><a href="#cb14-11"></a>  <span class="ex">-</span> move stack.exe C:\Stack\</span>
+<span id="cb14-12"><a href="#cb14-12"></a>  - .\cef3-simple\cef3-raw\scripts\setup.bat</span></code></pre></div>
+<p>Since I have not yet published the <a href="https://github.com/haskell-ui/cef3-raw">cef3-raw</a> on hackage I have it as a submodule for now, and thats why the first line of that script is needed, since appveyor doesn’t clone the repo recursively. Afterwords we install stack and add it to PATH. Finally we run the setup script for cef3-raw that downloads the pre-build cef3 dlls.</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb15-1"><a href="#cb15-1"></a><span class="fu">build_script</span><span class="kw">:</span></span>
+<span id="cb15-2"><a href="#cb15-2"></a><span class="at">  </span><span class="kw">-</span><span class="at"> stack setup --skip-msys --no-terminal &gt; NUL</span></span>
+<span id="cb15-3"><a href="#cb15-3"></a><span class="at">  </span><span class="kw">-</span><span class="at"> cd cef3-simple\cef3-raw</span></span>
+<span id="cb15-4"><a href="#cb15-4"></a><span class="at">  </span><span class="kw">-</span><span class="at"> .\scripts\configure.bat</span></span>
+<span id="cb15-5"><a href="#cb15-5"></a><span class="at">  </span><span class="kw">-</span><span class="at"> cd ..\..</span></span>
+<span id="cb15-6"><a href="#cb15-6"></a><span class="at">  </span><span class="kw">-</span><span class="at"> stack install</span></span></code></pre></div>
+<p>Build script is mostly straightforward. We setup stack, run a configure script of cef3-raw to point it to where we’ve installed the cef library with the setup script and than be build the whole thing.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb16-1"><a href="#cb16-1"></a><span class="fu">after_build</span><span class="kw">:</span></span>
+<span id="cb16-2"><a href="#cb16-2"></a><span class="at">  </span><span class="kw">-</span><span class="at"> md result\static\css</span></span>
+<span id="cb16-3"><a href="#cb16-3"></a><span class="at">  </span><span class="kw">-</span><span class="at"> xcopy /E /Q %CEF3_PATH%\Release\* result\</span></span>
+<span id="cb16-4"><a href="#cb16-4"></a><span class="at">  </span><span class="kw">-</span><span class="at"> xcopy /E /Q %CEF3_PATH%\Resources\* result\</span></span>
+<span id="cb16-5"><a href="#cb16-5"></a><span class="at">  </span><span class="kw">-</span><span class="at"> xcopy /Q %APPDATA%\local\bin\tmr.exe result\</span></span>
+<span id="cb16-6"><a href="#cb16-6"></a><span class="at">  </span><span class="kw">-</span><span class="at"> xcopy /Q resources\semantic.min.css result\static\css</span></span>
+<span id="cb16-7"><a href="#cb16-7"></a><span class="at">  </span><span class="kw">-</span><span class="at"> dir result</span></span>
+<span id="cb16-8"><a href="#cb16-8"></a><span class="at">  </span><span class="kw">-</span><span class="at"> cd result</span></span>
+<span id="cb16-9"><a href="#cb16-9"></a><span class="at">  </span><span class="kw">-</span><span class="at"> 7z a tmr.7z *</span></span>
+<span id="cb16-10"><a href="#cb16-10"></a><span class="at">  </span><span class="kw">-</span><span class="at"> 7z a tmr-exe.7z tmr.exe</span></span></code></pre></div>
 <p>We copy everything we need into a result directory and than pack it all up.</p>
-<div class="sourceCode"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span class="fu">artifacts:</span>
-  <span class="kw">-</span> <span class="fu">path:</span><span class="at"> result\tmr.7z</span>
-    <span class="fu">name:</span><span class="at"> Full App</span>
-  <span class="kw">-</span> <span class="fu">path:</span><span class="at"> result\tmr-exe.7z</span>
-    <span class="fu">name:</span><span class="at"> Exe Only</span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb17-1"><a href="#cb17-1"></a><span class="fu">artifacts</span><span class="kw">:</span></span>
+<span id="cb17-2"><a href="#cb17-2"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">path</span><span class="kw">:</span><span class="at"> result\tmr.7z</span></span>
+<span id="cb17-3"><a href="#cb17-3"></a><span class="at">    </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Full App</span></span>
+<span id="cb17-4"><a href="#cb17-4"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">path</span><span class="kw">:</span><span class="at"> result\tmr-exe.7z</span></span>
+<span id="cb17-5"><a href="#cb17-5"></a><span class="at">    </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Exe Only</span></span></code></pre></div>
 <p>Finally we create the output artifacts; one that contains everything we need and other with exe only for convenience when testing or for updates, etc. since the whole thing is ~30mb and the exe archive is just 2mb. And thats all folks. Now every time we push new commits appveyor will rebuild and upload the new version into the wide interwebs for everyone to play with. In fact if you are on a Windows machine right now, you can download <strong>tmr</strong> <a href="https://ci.appveyor.com/api/buildjobs/9m5e9g00tuto21lw/artifacts/result/tmr.7z">here</a>.</p>
 <p><em>Helpful Note: if you want to get rid of console on windows you will have to pass the following option to the linker (in cabal):</em></p>
-<div class="sourceCode"><pre class="sourceCode bash"><code class="sourceCode bash">  <span class="kw">if</span> <span class="ex">os</span>(windows)
-    <span class="ex">ghc-options</span>: -optl-mwindows</code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb18-1"><a href="#cb18-1"></a>  <span class="kw">if</span> <span class="ex">os</span>(windows)</span>
+<span id="cb18-2"><a href="#cb18-2"></a>    <span class="ex">ghc-options</span>: -optl-mwindows</span></code></pre></div>
 <h2 id="epilogue">Epilogue</h2>
-<p>And that's all there is to it.</p>
-<p>Now, there are disadvantages in this approach to building a desktop application - and I have been consciously using term <em>desktop application</em> instead of <em>native application</em> as I realise that calling that a program that contains a whole browser inside just for GUI is a bit rich - optimality being one of them. Perhaps security being another though I cannot really think about anything nefarious that can be done with it without already having full control of a machine; granted I haven not given it much thought. But there are also advantages I believe. Obviously you can reuse the libraries, tooling and skills like <a href="https://hackage.haskell.org/package/threepenny-gui">threepenny-gui</a>, HTML/CSS, <a href="https://semantic-ui.com">semantic-ui</a>, etc. Also creating multi-window applications could, potentially be very easy since you already start with a client/server architecture; thought I'll have to investigate it still.</p>
-<p>Of curse I have only started with this bindings and there is lots more that I'd like to do, like providing support for Mac, updating the bindings to the newer version of cef (and making the binding generation automatic to make it easier to keep it up to date). Creating a better high level abstractions like mentioned above support for multi-window applications or off-screen rendering to use with opengl, for example in a gamedev setup (frankly that was the initial motivation for me to work on this bindings).</p>
+<p>And that’s all there is to it.</p>
+<p>Now, there are disadvantages in this approach to building a desktop application - and I have been consciously using term <em>desktop application</em> instead of <em>native application</em> as I realise that calling that a program that contains a whole browser inside just for GUI is a bit rich - optimality being one of them. Perhaps security being another though I cannot really think about anything nefarious that can be done with it without already having full control of a machine; granted I haven not given it much thought. But there are also advantages I believe. Obviously you can reuse the libraries, tooling and skills like <a href="https://hackage.haskell.org/package/threepenny-gui">threepenny-gui</a>, HTML/CSS, <a href="https://semantic-ui.com">semantic-ui</a>, etc. Also creating multi-window applications could, potentially be very easy since you already start with a client/server architecture; thought I’ll have to investigate it still.</p>
+<p>Of curse I have only started with this bindings and there is lots more that I’d like to do, like providing support for Mac, updating the bindings to the newer version of cef (and making the binding generation automatic to make it easier to keep it up to date). Creating a better high level abstractions like mentioned above support for multi-window applications or off-screen rendering to use with opengl, for example in a gamedev setup (frankly that was the initial motivation for me to work on this bindings).</p>
 </div>
 
     </div>

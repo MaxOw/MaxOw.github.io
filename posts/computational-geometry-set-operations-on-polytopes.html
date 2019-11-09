@@ -58,7 +58,7 @@
             <li><a href="../">Home</a></li>
             <li><a href="../posts.html">Posts</a></li>
             <li><a href="https://github.com/MaxOw">Github</a></li>
-            <li><a href="../cv.html">Hire Me</a></li>
+            <li><a href="../hireme.html">Hire Me</a></li>
         </ul>
     </nav>
     &nbsp;
@@ -67,8 +67,8 @@
 <div class="twelve columns offset-by-one content">
     <h3 id="computational-geometry-set-operations-on-polytopes">Computational Geometry: Set Operations on Polytopes</h3>
 <hr />
-<p>Procedural graphics generation is one of these things that I've always had deep interest in and is often on my mind, yet somehow I couldn't really find much time to play with. Be it life getting in the way or sometimes simply my easily distractable nature - when I look at the contents of my hard drive all I can find is some sparsely scattered experiments in that field.</p>
-<p>One thing that I did find, however, was an implementation of a polyhedral set operations algorithm. It was something that I've quickly put together only up to a point where I've had something that looked right, after which I've promptly lost interest and moved to some other project. It didn't make any claims on the correctness of the implementation and there definitely weren't any attempts to make it optimal or even benchmark it. As such I have decided to revive it now and meld it into a neat little library. Hopefully it will become a building step into some bigger framework for procedural content creation, and even on its own it could be useful in the context of man made objects like for example architecture. And so this post is an in depth overview of the current implementation of that algorithm, generalized to work on any polytopes, hopefully correct and definitely much more optimal.</p>
+<p>Procedural graphics generation is one of these things that I’ve always had deep interest in and is often on my mind, yet somehow I couldn’t really find much time to play with. Be it life getting in the way or sometimes simply my easily distractable nature - when I look at the contents of my hard drive all I can find is some sparsely scattered experiments in that field.</p>
+<p>One thing that I did find, however, was an implementation of a polyhedral set operations algorithm. It was something that I’ve quickly put together only up to a point where I’ve had something that looked right, after which I’ve promptly lost interest and moved to some other project. It didn’t make any claims on the correctness of the implementation and there definitely weren’t any attempts to make it optimal or even benchmark it. As such I have decided to revive it now and meld it into a neat little library. Hopefully it will become a building step into some bigger framework for procedural content creation, and even on its own it could be useful in the context of man made objects like for example architecture. And so this post is an in depth overview of the current implementation of that algorithm, generalized to work on any polytopes, hopefully correct and definitely much more optimal.</p>
 <!-- ![][set-operation-examples] -->
 <p>
 <script>
@@ -88,22 +88,22 @@ function toggleGif() {
 <a href="javascript:toggleGif();">Stop/Start gif</a>
 </p>
 </p>
-<p>Frankly I was planning to write this post as a sort of tutorial, an overview of an algorithm and walk trough of a full implementation. However as I continued with different experiments and optimizations and general exploration of the solution space I kept pushing this writeup day by day forward... Finally I've came to a conclusion that it would be better to just write down what I have now and perhaps later write down follow-ups, otherwise it will never end. So anyway, here it is.</p>
-<p>While rereading draft of this post I decided that some code snippets where unnecessary convoluted. Not without a reason of course, but it would be a shame to overtly complicate things, whilst making it hard for a reader to follow the general idea of an algorithm. That's why I decided to simplify, within the bounds of reason, some parts of the code here in comparison to the actual implementation. Frankly I should have probably be much more radical in that process and perhaps even monomorphize it all to make it easier to read for people less familiar with Haskell but I didn't have time for that, so it is what it is. The actual source is available on <a href="https://github.com/MaxOw/computational-geometry">github</a>.</p>
+<p>Frankly I was planning to write this post as a sort of tutorial, an overview of an algorithm and walk trough of a full implementation. However as I continued with different experiments and optimizations and general exploration of the solution space I kept pushing this writeup day by day forward… Finally I’ve came to a conclusion that it would be better to just write down what I have now and perhaps later write down follow-ups, otherwise it will never end. So anyway, here it is.</p>
+<p>While rereading draft of this post I decided that some code snippets where unnecessary convoluted. Not without a reason of course, but it would be a shame to overtly complicate things, whilst making it hard for a reader to follow the general idea of an algorithm. That’s why I decided to simplify, within the bounds of reason, some parts of the code here in comparison to the actual implementation. Frankly I should have probably be much more radical in that process and perhaps even monomorphize it all to make it easier to read for people less familiar with Haskell but I didn’t have time for that, so it is what it is. The actual source is available on <a href="https://github.com/MaxOw/computational-geometry">github</a>.</p>
 <p>A word about the structure of this post: We will start with basic building blocks needed in the latter parts i.e planes and points together with predicates and operations on them. We will follow by facets and facet splitting/clipping. Next we will introduce two approaches to the actual SetOp algorithm. We will end with a word about boundary representation and some concluding discussion about higher dimensional use cases, possible optimizations etc.</p>
-<p>Finally before we start, a note about language: I'm going to use a 3 dimensional terminology to mean the n-dimensional equivalent concepts because it's a bit of a pain to constantly have to qualify everything with &quot;hyper&quot;, &quot;n-dimensional&quot; and what not. That is for example, I'll say &quot;plane&quot; whether I'm talking about 2d plane (line) or a n-dimensional hyper-plane.</p>
+<p>Finally before we start, a note about language: I’m going to use a 3 dimensional terminology to mean the n-dimensional equivalent concepts because it’s a bit of a pain to constantly have to qualify everything with “hyper”, “n-dimensional” and what not. That is for example, I’ll say “plane” whether I’m talking about 2d plane (line) or a n-dimensional hyper-plane.</p>
 <h3 id="plane-representation-operations-and-predicates">Plane representation, operations and predicates</h3>
 <p>We will represent a plane in the general form that is as a tuple of a vector <span class="math inline">\(V\)</span> and offset <span class="math inline">\(d\)</span> (equal to the length of <span class="math inline">\(V\)</span> multiplied by the distance of the plane from the origin), where a point <span class="math inline">\(P\)</span> is located on that plane <em>iff</em> it satisfies the equation:</p>
 <p><span class="math display">\[
 \sum_{i=1}^{n}V_iP_i + d = 0
 \]</span></p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">Plane</span> v n <span class="fu">=</span> <span class="dt">Plane</span>
-   {<span class="ot"> planeVector ::</span> v n
-   ,<span class="ot"> planeOffset ::</span> n
-   }</code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">data</span> <span class="dt">Plane</span> v n <span class="ot">=</span> <span class="dt">Plane</span></span>
+<span id="cb1-2"><a href="#cb1-2"></a>   {<span class="ot"> planeVector ::</span> v n</span>
+<span id="cb1-3"><a href="#cb1-3"></a>   ,<span class="ot"> planeOffset ::</span> n</span>
+<span id="cb1-4"><a href="#cb1-4"></a>   }</span></code></pre></div>
 <p>To flip a plane we negate all coefficients:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">flipPlane ::</span> (<span class="dt">Functor</span> v, <span class="dt">Num</span> n) <span class="ot">=&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Plane</span> v n
-flipPlane (<span class="dt">Plane</span> vs d) <span class="fu">=</span> <span class="dt">Plane</span> (fmap negate vs) (negate d)</code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb2-1"><a href="#cb2-1"></a><span class="ot">flipPlane ::</span> (<span class="dt">Functor</span> v, <span class="dt">Num</span> n) <span class="ot">=&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Plane</span> v n</span>
+<span id="cb2-2"><a href="#cb2-2"></a>flipPlane (<span class="dt">Plane</span> vs d) <span class="ot">=</span> <span class="dt">Plane</span> (<span class="fu">fmap</span> <span class="fu">negate</span> vs) (<span class="fu">negate</span> d)</span></code></pre></div>
 <h4 id="planes-parallelism-coincidence-and-coorientation.">Planes Parallelism, Coincidence and Coorientation.</h4>
 <p>Two planes are parallel if their directional vectors are collinear. That is if one is some scalar multiple of the other. In 2d the area of a parallelogram spanning two vectors is exactly the definition of a determinant of a 2x2 matrix with these vectors as bases. If we take two vectors <span class="math inline">\(V(x,y)\)</span> and <span class="math inline">\(V'\)</span> and assume that <span class="math inline">\(V' = \lambda V\)</span> we have:</p>
 <p><span class="math display">\[
@@ -115,43 +115,43 @@ y &amp; \lambda y \\
 \]</span> <!-- \text{Assuming commutativity of multiplication} --></p>
 <p>That is two vectors are collinear when that determinant is equal zero. Now we can generalize this to n dimensions by preforming that test for all 2-combinations of components:</p>
 <!-- This step requires proof... -->
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">collinear ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n) <span class="ot">=&gt;</span> v n <span class="ot">-&gt;</span> v n <span class="ot">-&gt;</span> <span class="dt">Bool</span>
-collinear v w <span class="fu">=</span> all f <span class="fu">$</span> combinations <span class="dv">2</span> <span class="fu">$</span> zipWith (,) v w
-    <span class="kw">where</span>
-    f [(a, b), (c, d)] <span class="fu">=</span> eqZero <span class="fu">$</span> a<span class="fu">*</span>d <span class="fu">-</span> b<span class="fu">*</span>c
-    f _                <span class="fu">=</span> <span class="dt">False</span> <span class="co">-- To silence exhaustiveness checker</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb3-1"><a href="#cb3-1"></a><span class="ot">collinear ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n) <span class="ot">=&gt;</span> v n <span class="ot">-&gt;</span> v n <span class="ot">-&gt;</span> <span class="dt">Bool</span></span>
+<span id="cb3-2"><a href="#cb3-2"></a>collinear v w <span class="ot">=</span> <span class="fu">all</span> f <span class="op">$</span> combinations <span class="dv">2</span> <span class="op">$</span> <span class="fu">zipWith</span> (,) v w</span>
+<span id="cb3-3"><a href="#cb3-3"></a>    <span class="kw">where</span></span>
+<span id="cb3-4"><a href="#cb3-4"></a>    f [(a, b), (c, d)] <span class="ot">=</span> eqZero <span class="op">$</span> a<span class="op">*</span>d <span class="op">-</span> b<span class="op">*</span>c</span>
+<span id="cb3-5"><a href="#cb3-5"></a>    f _                <span class="ot">=</span> <span class="dt">False</span> <span class="co">-- To silence exhaustiveness checker</span></span></code></pre></div>
 <p>Alternatively we could represent our planes in Hessian normal form (a normal <span class="math inline">\(\hat{N}\)</span> and a distance from origin <span class="math inline">\(p\)</span>). Then the planes are parallel <em>iff</em> the absolute value of a dot product between normals is equal to 1.</p>
 <p><span class="math display">\[|\hat{N}_1\cdotp\hat{N}_2| = 1\]</span></p>
 <p>However that would take us out of <span class="math inline">\(\mathbb{Q}\)</span> and also is less numerically stable though I guess it could be a performance win (especially in higher dimensions). Actually I was thinking about writing this code polymorphic in the representation of a plane (among other things) but I digress.</p>
-<p>Let's now continue with testing for coincidence of two planes. One thing we should notice is that general form is basically Hessian normal form scaled by some <span class="math inline">\(s\)</span> forall <span class="math inline">\(s\)</span> not equal <span class="math inline">\(0\)</span> <span class="math inline">\((s\hat{N},sp)\)</span>. Testing for coincidence in Hessian form requires only comparing if <span class="math inline">\(\hat{N}_1p_1 = \hat{N}_2p_2\)</span>. Now in general form if we divide both planes by <span class="math inline">\(s_1\)</span> and assign <span class="math inline">\(\lambda = s_1/s_2\)</span> we can see that planes are coincident if the two vectors made up from all n+1 coefficients are collinear. Or alternatively - if we already know that the planes are parallel - if <span class="math inline">\(V_1d_2 = V_2d_1\)</span>.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">coincidence ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n) <span class="ot">=&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Bool</span>
-coincidence (<span class="dt">Plane</span> v1 d1) (<span class="dt">Plane</span> v2 d2) <span class="fu">=</span> all f <span class="fu">$</span> zipWith (,) v1 v2
-    <span class="kw">where</span>
-    f (x1, x2) <span class="fu">=</span> eqZero <span class="fu">$</span> x1<span class="fu">*</span>d2 <span class="fu">-</span> x2<span class="fu">*</span>d1</code></pre></div>
+<p>Let’s now continue with testing for coincidence of two planes. One thing we should notice is that general form is basically Hessian normal form scaled by some <span class="math inline">\(s\)</span> forall <span class="math inline">\(s\)</span> not equal <span class="math inline">\(0\)</span> <span class="math inline">\((s\hat{N},sp)\)</span>. Testing for coincidence in Hessian form requires only comparing if <span class="math inline">\(\hat{N}_1p_1 = \hat{N}_2p_2\)</span>. Now in general form if we divide both planes by <span class="math inline">\(s_1\)</span> and assign <span class="math inline">\(\lambda = s_1/s_2\)</span> we can see that planes are coincident if the two vectors made up from all n+1 coefficients are collinear. Or alternatively - if we already know that the planes are parallel - if <span class="math inline">\(V_1d_2 = V_2d_1\)</span>.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb4-1"><a href="#cb4-1"></a><span class="ot">coincidence ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n) <span class="ot">=&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Bool</span></span>
+<span id="cb4-2"><a href="#cb4-2"></a>coincidence (<span class="dt">Plane</span> v1 d1) (<span class="dt">Plane</span> v2 d2) <span class="ot">=</span> <span class="fu">all</span> f <span class="op">$</span> <span class="fu">zipWith</span> (,) v1 v2</span>
+<span id="cb4-3"><a href="#cb4-3"></a>    <span class="kw">where</span></span>
+<span id="cb4-4"><a href="#cb4-4"></a>    f (x1, x2) <span class="ot">=</span> eqZero <span class="op">$</span> x1<span class="op">*</span>d2 <span class="op">-</span> x2<span class="op">*</span>d1</span></code></pre></div>
 <p>To test co-orientation the corresponding coefficients should have the same sign, that is their multiple should be grater or equal 0.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">coorientation ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n) <span class="ot">=&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Bool</span>
-coorientation (<span class="dt">Plane</span> v1 d1) (<span class="dt">Plane</span> v2 d2)
-    <span class="fu">=</span> all geqZero <span class="fu">$</span> d1<span class="fu">*</span>d2 <span class="fu">:</span> zipWith (<span class="fu">*</span>) v1 v2</code></pre></div>
-<p>These last two functions are dependent on the planes being parallel so, finally, let's make that dependence explicit.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">PlanesRelation</span> <span class="fu">=</span> <span class="dt">Parallel</span> <span class="dt">Incidence</span> <span class="dt">Orientation</span> <span class="fu">|</span> <span class="dt">Crossing</span>
-<span class="kw">data</span> <span class="dt">Incidence</span>      <span class="fu">=</span> <span class="dt">CoIncident</span> <span class="fu">|</span>  <span class="dt">NonIncident</span>
-<span class="kw">data</span> <span class="dt">Orientation</span>    <span class="fu">=</span> <span class="dt">CoOriented</span> <span class="fu">|</span> <span class="dt">AntiOriented</span>
-
-<span class="ot">planesRelation ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n)
-    <span class="ot">=&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">PlanesRelation</span>
-planesRelation p1<span class="fu">@</span>(<span class="dt">Plane</span> v1 d1) p2<span class="fu">@</span>(<span class="dt">Plane</span> v2 d2)
-    <span class="fu">|</span> collinear v1 v2 <span class="fu">=</span> <span class="dt">Parallel</span> incidence orientation
-    <span class="fu">|</span> otherwise       <span class="fu">=</span> <span class="dt">Crossing</span>
-    <span class="kw">where</span>
-    incidence   <span class="fu">=</span> bool  <span class="dt">NonIncident</span> <span class="dt">CoIncident</span> <span class="fu">$</span> coincidence   p1 p2
-    orientation <span class="fu">=</span> bool <span class="dt">AntiOriented</span> <span class="dt">CoOriented</span> <span class="fu">$</span> coorientation p1 p2</code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb5-1"><a href="#cb5-1"></a><span class="ot">coorientation ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n) <span class="ot">=&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Bool</span></span>
+<span id="cb5-2"><a href="#cb5-2"></a>coorientation (<span class="dt">Plane</span> v1 d1) (<span class="dt">Plane</span> v2 d2)</span>
+<span id="cb5-3"><a href="#cb5-3"></a>    <span class="ot">=</span> <span class="fu">all</span> geqZero <span class="op">$</span> d1<span class="op">*</span>d2 <span class="op">:</span> <span class="fu">zipWith</span> (<span class="op">*</span>) v1 v2</span></code></pre></div>
+<p>These last two functions are dependent on the planes being parallel so, finally, let’s make that dependence explicit.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb6-1"><a href="#cb6-1"></a><span class="kw">data</span> <span class="dt">PlanesRelation</span> <span class="ot">=</span> <span class="dt">Parallel</span> <span class="dt">Incidence</span> <span class="dt">Orientation</span> <span class="op">|</span> <span class="dt">Crossing</span></span>
+<span id="cb6-2"><a href="#cb6-2"></a><span class="kw">data</span> <span class="dt">Incidence</span>      <span class="ot">=</span> <span class="dt">CoIncident</span> <span class="op">|</span>  <span class="dt">NonIncident</span></span>
+<span id="cb6-3"><a href="#cb6-3"></a><span class="kw">data</span> <span class="dt">Orientation</span>    <span class="ot">=</span> <span class="dt">CoOriented</span> <span class="op">|</span> <span class="dt">AntiOriented</span></span>
+<span id="cb6-4"><a href="#cb6-4"></a></span>
+<span id="cb6-5"><a href="#cb6-5"></a><span class="ot">planesRelation ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n)</span>
+<span id="cb6-6"><a href="#cb6-6"></a>    <span class="ot">=&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">PlanesRelation</span></span>
+<span id="cb6-7"><a href="#cb6-7"></a>planesRelation p1<span class="op">@</span>(<span class="dt">Plane</span> v1 d1) p2<span class="op">@</span>(<span class="dt">Plane</span> v2 d2)</span>
+<span id="cb6-8"><a href="#cb6-8"></a>    <span class="op">|</span> collinear v1 v2 <span class="ot">=</span> <span class="dt">Parallel</span> incidence orientation</span>
+<span id="cb6-9"><a href="#cb6-9"></a>    <span class="op">|</span> <span class="fu">otherwise</span>       <span class="ot">=</span> <span class="dt">Crossing</span></span>
+<span id="cb6-10"><a href="#cb6-10"></a>    <span class="kw">where</span></span>
+<span id="cb6-11"><a href="#cb6-11"></a>    incidence   <span class="ot">=</span> bool  <span class="dt">NonIncident</span> <span class="dt">CoIncident</span> <span class="op">$</span> coincidence   p1 p2</span>
+<span id="cb6-12"><a href="#cb6-12"></a>    orientation <span class="ot">=</span> bool <span class="dt">AntiOriented</span> <span class="dt">CoOriented</span> <span class="op">$</span> coorientation p1 p2</span></code></pre></div>
 <h3 id="crosspoints-and-point-plane-orientation">CrossPoints and Point-Plane Orientation</h3>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">Sign</span> <span class="fu">=</span> <span class="dt">M</span> <span class="fu">|</span> <span class="dt">Z</span> <span class="fu">|</span> <span class="dt">P</span>
-<span class="kw">data</span> <span class="dt">CrossPoint</span> v n <span class="fu">=</span> <span class="dt">CP</span>
-   {<span class="ot"> orientation ::</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Sign</span>
-   ,<span class="ot"> getPoint    ::</span> <span class="dt">Point</span> v n
-   }</code></pre></div>
-<p><code>CrossPoint</code> is a helpful little type that I guess you could call a &quot;premature optimization&quot;. When merging BSPs there will be new points created in places where splitting plane crosses edges between points (by solving the system of linear equations made from these planes). To know if a plane crosses between points we will need to relate them, and we can do that using a predicate of form (here in 3 dimensions but it generalizes):</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb7-1"><a href="#cb7-1"></a><span class="kw">data</span> <span class="dt">Sign</span> <span class="ot">=</span> <span class="dt">M</span> <span class="op">|</span> <span class="dt">Z</span> <span class="op">|</span> <span class="dt">P</span></span>
+<span id="cb7-2"><a href="#cb7-2"></a><span class="kw">data</span> <span class="dt">CrossPoint</span> v n <span class="ot">=</span> <span class="dt">CP</span></span>
+<span id="cb7-3"><a href="#cb7-3"></a>   {<span class="ot"> orientation ::</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Sign</span></span>
+<span id="cb7-4"><a href="#cb7-4"></a>   ,<span class="ot"> getPoint    ::</span> <span class="dt">Point</span> v n</span>
+<span id="cb7-5"><a href="#cb7-5"></a>   }</span></code></pre></div>
+<p><code>CrossPoint</code> is a helpful little type that I guess you could call a “premature optimization”. When merging BSPs there will be new points created in places where splitting plane crosses edges between points (by solving the system of linear equations made from these planes). To know if a plane crosses between points we will need to relate them, and we can do that using a predicate of form (here in 3 dimensions but it generalizes):</p>
 <p><span class="math display">\[
 \begin{vmatrix}
 p_a &amp; p_b &amp; p_c \\
@@ -166,387 +166,367 @@ r_a &amp; r_b &amp; r_c &amp; r_d \\
 s_a &amp; s_b &amp; s_c &amp; s_d \\
 \end{vmatrix}
 \]</span></p>
-<p>Where <span class="math inline">\(p, q, r\)</span> are the three planes that make the point and <span class="math inline">\(s\)</span> is the plane that we relate to (<span class="math inline">\(a, b, c\)</span> and <span class="math inline">\(d\)</span> are plane coefficients). We then represent that predicate as a closure to get some wins due to sharing and partial evaluation. I haven't really done any benchmarking here (that's why I called it &quot;premature optimization&quot;) but it feels right. Though I'll probably have to look into it in the future and perhaps rewrite it with a simple Gaussian elimination straight up if it happens to be faster in the end.</p>
+<p>Where <span class="math inline">\(p, q, r\)</span> are the three planes that make the point and <span class="math inline">\(s\)</span> is the plane that we relate to (<span class="math inline">\(a, b, c\)</span> and <span class="math inline">\(d\)</span> are plane coefficients). We then represent that predicate as a closure to get some wins due to sharing and partial evaluation. I haven’t really done any benchmarking here (that’s why I called it “premature optimization”) but it feels right. Though I’ll probably have to look into it in the future and perhaps rewrite it with a simple Gaussian elimination straight up if it happens to be faster in the end.</p>
 <p>Now when you have a point turning it into a <code>CrossPoint</code> is straightforward:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">toCrossPoint ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">Ord</span> n, <span class="dt">EqZero</span> n)
-    <span class="ot">=&gt;</span> <span class="dt">Point</span> v n <span class="ot">-&gt;</span> <span class="dt">CrossPoint</span> v n
-toCrossPoint pt <span class="fu">=</span> <span class="dt">CP</span> orient pt
-    <span class="kw">where</span>
-    orient (<span class="dt">Plane</span> v d) <span class="fu">=</span> toSign <span class="fu">.</span> sum <span class="fu">$</span> d <span class="fu">:</span> zipWith (<span class="fu">*</span>) v pt
-
-<span class="ot">toSign ::</span> (<span class="dt">Ord</span> n, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n) <span class="ot">=&gt;</span> n <span class="ot">-&gt;</span> <span class="dt">Sign</span>
-toSign x
-    <span class="fu">|</span> eqZero x  <span class="fu">=</span> <span class="dt">Z</span>
-    <span class="fu">|</span> x <span class="fu">&lt;</span> <span class="dv">0</span>     <span class="fu">=</span> <span class="dt">M</span>
-    <span class="fu">|</span> otherwise <span class="fu">=</span> <span class="dt">P</span></code></pre></div>
-<p>The exciting part is making a <code>CrossPoint</code> from a vector of planes. We calculate the big determinant via Laplace expansion sharing all intermediate results and calculate the orientation using the aforementioned predicate. However we can also notice that the intermediate determinants for minors (<span class="math inline">\(d_0..d_3\)</span>) are just stone throw away from solving for the point via Cramer's rule (sans some sign correction due to column permutation) so we do just that. Frankly when I first thought of this I felt really clever, however now that I look at this it doesn't really seem like we gain much from this. As I said it might just be better to simply solve for the point with the Gaussian elimination straight up and drop all of this <code>CrossPoint</code> business. Plus writing this solution for arbitrary <span class="math inline">\(n\)</span> optimally will probably be much harder. There are also possible improvements to be made in terms of numerical stability, something that's discussed in <span class="citation">[<strong>SHE97</strong>]</span> but I've decided not to worry about that just yet.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">class</span> <span class="dt">MakeCrossPoint</span> v n <span class="kw">where</span>
-<span class="ot">    makeCrossPoint ::</span> v (<span class="dt">Plane</span> v n) <span class="ot">-&gt;</span> <span class="dt">Maybe</span> (<span class="dt">CrossPoint</span> v n)
-
-<span class="kw">instance</span> (<span class="dt">Fractional</span> n, <span class="dt">Ord</span> n, <span class="dt">EqZero</span> n) <span class="ot">=&gt;</span> <span class="dt">MakeCrossPoint</span> <span class="dt">V3</span> n <span class="kw">where</span>
-    makeCrossPoint planes
-        <span class="fu">|</span> eqZero d3 <span class="fu">=</span> <span class="dt">Nothing</span>
-        <span class="fu">|</span> otherwise <span class="fu">=</span> <span class="dt">Just</span> <span class="fu">$</span> <span class="dt">CP</span> orient solved
-        <span class="kw">where</span>
-        <span class="dt">V3</span>     (<span class="dt">Plane</span> (<span class="dt">V3</span> a b c) d)
-               (<span class="dt">Plane</span> (<span class="dt">V3</span> e f g) h)
-               (<span class="dt">Plane</span> (<span class="dt">V3</span> i j k) l) <span class="fu">=</span> planes
-        orient (<span class="dt">Plane</span> (<span class="dt">V3</span> m n o) p) <span class="fu">=</span> toSign <span class="fu">$</span> <span class="fu">-</span>d3<span class="fu">*</span>(m<span class="fu">*</span>d0 <span class="fu">-</span> n<span class="fu">*</span>d1 <span class="fu">+</span> o<span class="fu">*</span>d2 <span class="fu">-</span> p<span class="fu">*</span>d3)
-
-        d0 <span class="fu">=</span> k<span class="fu">*</span>m1 <span class="fu">-</span> j<span class="fu">*</span>m0 <span class="fu">+</span> l<span class="fu">*</span>m2
-        d1 <span class="fu">=</span> k<span class="fu">*</span>m3 <span class="fu">-</span> i<span class="fu">*</span>m0 <span class="fu">+</span> l<span class="fu">*</span>m4
-        d2 <span class="fu">=</span> j<span class="fu">*</span>m3 <span class="fu">-</span> i<span class="fu">*</span>m1 <span class="fu">+</span> l<span class="fu">*</span>m5
-        d3 <span class="fu">=</span> i<span class="fu">*</span>m2 <span class="fu">-</span> j<span class="fu">*</span>m4 <span class="fu">+</span> k<span class="fu">*</span>m5
-
-        m0 <span class="fu">=</span> c<span class="fu">*</span>h <span class="fu">-</span> d<span class="fu">*</span>g
-        m1 <span class="fu">=</span> b<span class="fu">*</span>h <span class="fu">-</span> d<span class="fu">*</span>f
-        m2 <span class="fu">=</span> c<span class="fu">*</span>f <span class="fu">-</span> b<span class="fu">*</span>g
-        m3 <span class="fu">=</span> a<span class="fu">*</span>h <span class="fu">-</span> d<span class="fu">*</span>e
-        m4 <span class="fu">=</span> c<span class="fu">*</span>e <span class="fu">-</span> a<span class="fu">*</span>g
-        m5 <span class="fu">=</span> b<span class="fu">*</span>e <span class="fu">-</span> a<span class="fu">*</span>f
-
-        dd <span class="fu">=</span> <span class="dv">1</span><span class="fu">/</span>d3
-        solved <span class="fu">=</span> <span class="dt">Point.P</span> <span class="fu">$</span> <span class="dt">V3</span> (<span class="fu">-</span>dd<span class="fu">*</span>d0) (dd<span class="fu">*</span>d1) (<span class="fu">-</span>dd<span class="fu">*</span>d2)</code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb8-1"><a href="#cb8-1"></a><span class="ot">toCrossPoint ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">Ord</span> n, <span class="dt">EqZero</span> n)</span>
+<span id="cb8-2"><a href="#cb8-2"></a>    <span class="ot">=&gt;</span> <span class="dt">Point</span> v n <span class="ot">-&gt;</span> <span class="dt">CrossPoint</span> v n</span>
+<span id="cb8-3"><a href="#cb8-3"></a>toCrossPoint pt <span class="ot">=</span> <span class="dt">CP</span> orient pt</span>
+<span id="cb8-4"><a href="#cb8-4"></a>    <span class="kw">where</span></span>
+<span id="cb8-5"><a href="#cb8-5"></a>    orient (<span class="dt">Plane</span> v d) <span class="ot">=</span> toSign <span class="op">.</span> <span class="fu">sum</span> <span class="op">$</span> d <span class="op">:</span> <span class="fu">zipWith</span> (<span class="op">*</span>) v pt</span>
+<span id="cb8-6"><a href="#cb8-6"></a></span>
+<span id="cb8-7"><a href="#cb8-7"></a><span class="ot">toSign ::</span> (<span class="dt">Ord</span> n, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n) <span class="ot">=&gt;</span> n <span class="ot">-&gt;</span> <span class="dt">Sign</span></span>
+<span id="cb8-8"><a href="#cb8-8"></a>toSign x</span>
+<span id="cb8-9"><a href="#cb8-9"></a>    <span class="op">|</span> eqZero x  <span class="ot">=</span> <span class="dt">Z</span></span>
+<span id="cb8-10"><a href="#cb8-10"></a>    <span class="op">|</span> x <span class="op">&lt;</span> <span class="dv">0</span>     <span class="ot">=</span> <span class="dt">M</span></span>
+<span id="cb8-11"><a href="#cb8-11"></a>    <span class="op">|</span> <span class="fu">otherwise</span> <span class="ot">=</span> <span class="dt">P</span></span></code></pre></div>
+<p>The exciting part is making a <code>CrossPoint</code> from a vector of planes. We calculate the big determinant via Laplace expansion sharing all intermediate results and calculate the orientation using the aforementioned predicate. However we can also notice that the intermediate determinants for minors (<span class="math inline">\(d_0..d_3\)</span>) are just stone throw away from solving for the point via Cramer’s rule (sans some sign correction due to column permutation) so we do just that. Frankly when I first thought of this I felt really clever, however now that I look at this it doesn’t really seem like we gain much from this. As I said it might just be better to simply solve for the point with the Gaussian elimination straight up and drop all of this <code>CrossPoint</code> business. Plus writing this solution for arbitrary <span class="math inline">\(n\)</span> optimally will probably be much harder. There are also possible improvements to be made in terms of numerical stability, something that’s discussed in <span class="citation" data-cites="she97">[<strong>SHE97</strong>]</span> but I’ve decided not to worry about that just yet.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb9-1"><a href="#cb9-1"></a><span class="kw">class</span> <span class="dt">MakeCrossPoint</span> v n <span class="kw">where</span></span>
+<span id="cb9-2"><a href="#cb9-2"></a><span class="ot">    makeCrossPoint ::</span> v (<span class="dt">Plane</span> v n) <span class="ot">-&gt;</span> <span class="dt">Maybe</span> (<span class="dt">CrossPoint</span> v n)</span>
+<span id="cb9-3"><a href="#cb9-3"></a></span>
+<span id="cb9-4"><a href="#cb9-4"></a><span class="kw">instance</span> (<span class="dt">Fractional</span> n, <span class="dt">Ord</span> n, <span class="dt">EqZero</span> n) <span class="ot">=&gt;</span> <span class="dt">MakeCrossPoint</span> <span class="dt">V3</span> n <span class="kw">where</span></span>
+<span id="cb9-5"><a href="#cb9-5"></a>    makeCrossPoint planes</span>
+<span id="cb9-6"><a href="#cb9-6"></a>        <span class="op">|</span> eqZero d3 <span class="ot">=</span> <span class="dt">Nothing</span></span>
+<span id="cb9-7"><a href="#cb9-7"></a>        <span class="op">|</span> <span class="fu">otherwise</span> <span class="ot">=</span> <span class="dt">Just</span> <span class="op">$</span> <span class="dt">CP</span> orient solved</span>
+<span id="cb9-8"><a href="#cb9-8"></a>        <span class="kw">where</span></span>
+<span id="cb9-9"><a href="#cb9-9"></a>        <span class="dt">V3</span>     (<span class="dt">Plane</span> (<span class="dt">V3</span> a b c) d)</span>
+<span id="cb9-10"><a href="#cb9-10"></a>               (<span class="dt">Plane</span> (<span class="dt">V3</span> e f g) h)</span>
+<span id="cb9-11"><a href="#cb9-11"></a>               (<span class="dt">Plane</span> (<span class="dt">V3</span> i j k) l) <span class="ot">=</span> planes</span>
+<span id="cb9-12"><a href="#cb9-12"></a>        orient (<span class="dt">Plane</span> (<span class="dt">V3</span> m n o) p) <span class="ot">=</span> toSign <span class="op">$</span> <span class="op">-</span>d3<span class="op">*</span>(m<span class="op">*</span>d0 <span class="op">-</span> n<span class="op">*</span>d1 <span class="op">+</span> o<span class="op">*</span>d2 <span class="op">-</span> p<span class="op">*</span>d3)</span>
+<span id="cb9-13"><a href="#cb9-13"></a></span>
+<span id="cb9-14"><a href="#cb9-14"></a>        d0 <span class="ot">=</span> k<span class="op">*</span>m1 <span class="op">-</span> j<span class="op">*</span>m0 <span class="op">+</span> l<span class="op">*</span>m2</span>
+<span id="cb9-15"><a href="#cb9-15"></a>        d1 <span class="ot">=</span> k<span class="op">*</span>m3 <span class="op">-</span> i<span class="op">*</span>m0 <span class="op">+</span> l<span class="op">*</span>m4</span>
+<span id="cb9-16"><a href="#cb9-16"></a>        d2 <span class="ot">=</span> j<span class="op">*</span>m3 <span class="op">-</span> i<span class="op">*</span>m1 <span class="op">+</span> l<span class="op">*</span>m5</span>
+<span id="cb9-17"><a href="#cb9-17"></a>        d3 <span class="ot">=</span> i<span class="op">*</span>m2 <span class="op">-</span> j<span class="op">*</span>m4 <span class="op">+</span> k<span class="op">*</span>m5</span>
+<span id="cb9-18"><a href="#cb9-18"></a></span>
+<span id="cb9-19"><a href="#cb9-19"></a>        m0 <span class="ot">=</span> c<span class="op">*</span>h <span class="op">-</span> d<span class="op">*</span>g</span>
+<span id="cb9-20"><a href="#cb9-20"></a>        m1 <span class="ot">=</span> b<span class="op">*</span>h <span class="op">-</span> d<span class="op">*</span>f</span>
+<span id="cb9-21"><a href="#cb9-21"></a>        m2 <span class="ot">=</span> c<span class="op">*</span>f <span class="op">-</span> b<span class="op">*</span>g</span>
+<span id="cb9-22"><a href="#cb9-22"></a>        m3 <span class="ot">=</span> a<span class="op">*</span>h <span class="op">-</span> d<span class="op">*</span>e</span>
+<span id="cb9-23"><a href="#cb9-23"></a>        m4 <span class="ot">=</span> c<span class="op">*</span>e <span class="op">-</span> a<span class="op">*</span>g</span>
+<span id="cb9-24"><a href="#cb9-24"></a>        m5 <span class="ot">=</span> b<span class="op">*</span>e <span class="op">-</span> a<span class="op">*</span>f</span>
+<span id="cb9-25"><a href="#cb9-25"></a></span>
+<span id="cb9-26"><a href="#cb9-26"></a>        dd <span class="ot">=</span> <span class="dv">1</span><span class="op">/</span>d3</span>
+<span id="cb9-27"><a href="#cb9-27"></a>        solved <span class="ot">=</span> <span class="dt">Point.P</span> <span class="op">$</span> <span class="dt">V3</span> (<span class="op">-</span>dd<span class="op">*</span>d0) (dd<span class="op">*</span>d1) (<span class="op">-</span>dd<span class="op">*</span>d2)</span></code></pre></div>
 <p>Now that I look at it the <span class="math inline">\(d_0..d_3\)</span> determinants (with appropriate signs) are (I believe) coordinates of that point in the homogeneous coordinates system and that would probably be a much better representation for the <code>CrossPoint</code> then the current one with the closure. Especially if we would like to reimplement it in the context of GPGPU in the future.</p>
 <h3 id="facets-representation-and-splittingclipping">Facets representation and splitting/clipping</h3>
 <p>We will represent a facet in n dimensions as a plane and a boundary graph with nodes being <code>CrossPoint</code>s and edges n-2 edge planes (n-1 counting the base plane). However since such robust solution is a bit cumbersome for smaller dimensions, we will make <code>Facet</code> parametric in the boundary representation, with pair of <code>CrossPoint</code>s as a boundary in 2d (edge points of a line) and list (or rather loop) of <code>CrossPoint</code> and leading <code>Plane</code> pairs, bounding the facet polygon in 3d.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">Facet</span> b v n <span class="fu">=</span> <span class="dt">Facet</span>
-   {<span class="ot"> facetPlane    ::</span> <span class="dt">Plane</span> v n
-   ,<span class="ot"> facetBoundary ::</span> b v n
-   }
-
-<span class="kw">type</span> <span class="dt">FB2</span> v n <span class="fu">=</span> (<span class="dt">CrossPoint</span> v n, <span class="dt">CrossPoint</span> v n)
-<span class="kw">type</span> <span class="dt">FB3</span> v n <span class="fu">=</span> [(<span class="dt">CrossPoint</span> v n, <span class="dt">Plane</span> v n)]</code></pre></div>
-<p>Next we have one of the fundamental parts of the whole algorithm the facet splitting function (and class). We will actually call the class <code>Clip</code> (clipping and splitting are corresponding operations so frankly it doesn't matter and I like that name better).</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">class</span> <span class="dt">Clip</span> b v n <span class="kw">where</span>
-<span class="ot">    clipFacet  ::</span> <span class="dt">Plane</span> v n   <span class="co">-- ^ Clipping plane</span>
-               <span class="ot">-&gt;</span> <span class="dt">Facet</span> b v n <span class="co">-- ^ Facet to clip</span>
-               <span class="ot">-&gt;</span> <span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n)
-
-<span class="ot">    splitFacet ::</span> <span class="dt">Plane</span> v n   <span class="co">-- ^ Splitting plane</span>
-               <span class="ot">-&gt;</span> <span class="dt">Facet</span> b v n <span class="co">-- ^ Facet to split</span>
-               <span class="ot">-&gt;</span> (<span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n), <span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n))
-
-    clipFacet  p f <span class="fu">=</span> fst <span class="fu">$</span> splitFacet p f
-    splitFacet p f <span class="fu">=</span> (clipFacet p f, clipFacet (flipPlane p) f)
-
-    <span class="ot">{-# MINIMAL (clipFacet | splitFacet) #-}</span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb10-1"><a href="#cb10-1"></a><span class="kw">data</span> <span class="dt">Facet</span> b v n <span class="ot">=</span> <span class="dt">Facet</span></span>
+<span id="cb10-2"><a href="#cb10-2"></a>   {<span class="ot"> facetPlane    ::</span> <span class="dt">Plane</span> v n</span>
+<span id="cb10-3"><a href="#cb10-3"></a>   ,<span class="ot"> facetBoundary ::</span> b v n</span>
+<span id="cb10-4"><a href="#cb10-4"></a>   }</span>
+<span id="cb10-5"><a href="#cb10-5"></a></span>
+<span id="cb10-6"><a href="#cb10-6"></a><span class="kw">type</span> <span class="dt">FB2</span> v n <span class="ot">=</span> (<span class="dt">CrossPoint</span> v n, <span class="dt">CrossPoint</span> v n)</span>
+<span id="cb10-7"><a href="#cb10-7"></a><span class="kw">type</span> <span class="dt">FB3</span> v n <span class="ot">=</span> [(<span class="dt">CrossPoint</span> v n, <span class="dt">Plane</span> v n)]</span></code></pre></div>
+<p>Next we have one of the fundamental parts of the whole algorithm the facet splitting function (and class). We will actually call the class <code>Clip</code> (clipping and splitting are corresponding operations so frankly it doesn’t matter and I like that name better).</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb11-1"><a href="#cb11-1"></a><span class="kw">class</span> <span class="dt">Clip</span> b v n <span class="kw">where</span></span>
+<span id="cb11-2"><a href="#cb11-2"></a><span class="ot">    clipFacet  ::</span> <span class="dt">Plane</span> v n   <span class="co">-- ^ Clipping plane</span></span>
+<span id="cb11-3"><a href="#cb11-3"></a>               <span class="ot">-&gt;</span> <span class="dt">Facet</span> b v n <span class="co">-- ^ Facet to clip</span></span>
+<span id="cb11-4"><a href="#cb11-4"></a>               <span class="ot">-&gt;</span> <span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n)</span>
+<span id="cb11-5"><a href="#cb11-5"></a></span>
+<span id="cb11-6"><a href="#cb11-6"></a><span class="ot">    splitFacet ::</span> <span class="dt">Plane</span> v n   <span class="co">-- ^ Splitting plane</span></span>
+<span id="cb11-7"><a href="#cb11-7"></a>               <span class="ot">-&gt;</span> <span class="dt">Facet</span> b v n <span class="co">-- ^ Facet to split</span></span>
+<span id="cb11-8"><a href="#cb11-8"></a>               <span class="ot">-&gt;</span> (<span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n), <span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n))</span>
+<span id="cb11-9"><a href="#cb11-9"></a></span>
+<span id="cb11-10"><a href="#cb11-10"></a>    clipFacet  p f <span class="ot">=</span> <span class="fu">fst</span> <span class="op">$</span> splitFacet p f</span>
+<span id="cb11-11"><a href="#cb11-11"></a>    splitFacet p f <span class="ot">=</span> (clipFacet p f, clipFacet (flipPlane p) f)</span>
+<span id="cb11-12"><a href="#cb11-12"></a></span>
+<span id="cb11-13"><a href="#cb11-13"></a>    <span class="ot">{-# MINIMAL (clipFacet | splitFacet) #-}</span></span></code></pre></div>
 <p>Implementation for 2d is not particularly elaborate: if orientations of edge points relative to the splitting plane <span class="math inline">\(h\)</span> are opposite, we create new point by crossing the facet plane <span class="math inline">\(s\)</span> with the splitting plane <span class="math inline">\(h\)</span> and distribute the newly created facets in the tuple (positive to the left, negative to the right). For only positive (or negative) case with one edge being possibly zero we return the whole facet on that side. The final Z Z case is redundant because it is handled by the <code>splitCoincident</code> combinator that for faces coincident with the splitting plane returns them on the side with the same orientation:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">instance</span> (<span class="dt">MakeCrossPoint</span> v n, <span class="dt">Vec2</span> v, <span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n)
-    <span class="ot">=&gt;</span> <span class="dt">Clip</span> <span class="dt">FB2</span> v n <span class="kw">where</span>
-    splitFacet h f<span class="fu">@</span>(<span class="dt">Facet</span> s (a, b)) <span class="fu">=</span> splitCoincident h f othercase
-      <span class="kw">where</span>
-      mc     <span class="fu">=</span> makeCrossPoint <span class="fu">$</span> vec2 h s
-      go x y <span class="fu">=</span> <span class="dt">Just</span> <span class="fu">$</span> <span class="dt">Facet</span> s (x, y)
-
-      othercase <span class="fu">=</span> table (orientation a h) (orientation b h)
-      table <span class="dt">P</span> <span class="dt">M</span> <span class="fu">=</span> (mc <span class="fu">&gt;&gt;=</span> \c <span class="ot">-&gt;</span> go a c, mc <span class="fu">&gt;&gt;=</span> \c <span class="ot">-&gt;</span> go c b)
-      table <span class="dt">M</span> <span class="dt">P</span> <span class="fu">=</span> (mc <span class="fu">&gt;&gt;=</span> \c <span class="ot">-&gt;</span> go c b, mc <span class="fu">&gt;&gt;=</span> \c <span class="ot">-&gt;</span> go a c)
-      table <span class="dt">P</span> _ <span class="fu">=</span> (<span class="dt">Just</span> f, <span class="dt">Nothing</span>)
-      table _ <span class="dt">P</span> <span class="fu">=</span> (<span class="dt">Just</span> f, <span class="dt">Nothing</span>)
-      table <span class="dt">M</span> _ <span class="fu">=</span> (<span class="dt">Nothing</span>, <span class="dt">Just</span> f)
-      table _ <span class="dt">M</span> <span class="fu">=</span> (<span class="dt">Nothing</span>, <span class="dt">Just</span> f)
-      <span class="co">-- This last case is not needed and is only here for completeness.</span>
-      <span class="co">-- It could happen if someone wrongly created a facet with edge</span>
-      <span class="co">-- points not lying on the facet plane (line). In such case, that</span>
-      <span class="co">-- facet is simply discarded by the splitting function.</span>
-      table <span class="dt">Z</span> <span class="dt">Z</span> <span class="fu">=</span> (<span class="dt">Nothing</span>, <span class="dt">Nothing</span>)
-
-<span class="ot">splitCoincident ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n)
-    <span class="ot">=&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Facet</span> b v n
-    <span class="ot">-&gt;</span> (<span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n), <span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n))
-    <span class="ot">-&gt;</span> (<span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n), <span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n))
-splitCoincident h f<span class="fu">@</span>(<span class="dt">Facet</span> s _) othercase <span class="fu">=</span> <span class="kw">case</span> planesRelation h s <span class="kw">of</span>
-    <span class="dt">Parallel</span> <span class="dt">CoIncident</span>   <span class="dt">CoOriented</span> <span class="ot">-&gt;</span> (<span class="dt">Just</span> f, <span class="dt">Nothing</span>)
-    <span class="dt">Parallel</span> <span class="dt">CoIncident</span> <span class="dt">AntiOriented</span> <span class="ot">-&gt;</span> (<span class="dt">Nothing</span>, <span class="dt">Just</span> f)
-    _ <span class="ot">-&gt;</span> othercase</code></pre></div>
-<p>Splitting a 3d facet is a bit more meticulous, that's why I'm going to present here a slightly simplified version based on clipping: First we handle the coincident case with the <code>splitCoincident</code> and all positive (negative) with some possible zeros cases similarly how we did it in the 2d case. Whats left is a case where the splitting plane goes through the facet. For that we clip the boundary twice with signs flipped for the minus side with the <code>clipFast</code> function that I'll explain next.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">instance</span> (<span class="dt">MakeCrossPoint</span> v n, <span class="dt">Vec3</span> v, <span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n)
-    <span class="ot">=&gt;</span> <span class="dt">Clip</span> (<span class="dt">FB2</span> v n) v n <span class="kw">where</span>
-    splitFacet h f<span class="fu">@</span>(<span class="dt">Facet</span> s ps) <span class="fu">=</span> splitCoincident h f othercase
-      <span class="kw">where</span>
-      othercase
-        <span class="fu">|</span> all (\x <span class="ot">-&gt;</span> x <span class="fu">==</span> <span class="dt">P</span> <span class="fu">||</span> x <span class="fu">==</span> <span class="dt">Z</span>) sP <span class="fu">=</span> (<span class="dt">Just</span> f, <span class="dt">Nothing</span>)
-        <span class="fu">|</span> all (\x <span class="ot">-&gt;</span> x <span class="fu">==</span> <span class="dt">M</span> <span class="fu">||</span> x <span class="fu">==</span> <span class="dt">Z</span>) sM <span class="fu">=</span> (<span class="dt">Nothing</span>, <span class="dt">Just</span> f)
-        <span class="fu">|</span> otherwise                       <span class="fu">=</span> (go sP, go sM)
-
-      go sS <span class="fu">=</span> mkFacet <span class="fu">$</span> clipFast mkP h sS ps
-      mkFacet ops<span class="fu">@</span>(_<span class="fu">:</span>_<span class="fu">:</span>_<span class="fu">:</span>_) <span class="fu">=</span> <span class="dt">Just</span> <span class="fu">$</span> <span class="dt">Facet</span> s ops
-      mkFacet _             <span class="fu">=</span> <span class="dt">Nothing</span>
-      mkP v <span class="fu">=</span> makeCrossPoint <span class="fu">$</span> vec3 s h v
-
-      (sP, sM) <span class="fu">=</span> unzip <span class="fu">$</span> map (toPM <span class="fu">.</span> flip orientation h <span class="fu">.</span> fst) ps
-      toPM <span class="dt">P</span> <span class="fu">=</span> (<span class="dt">P</span>, <span class="dt">M</span>)
-      toPM <span class="dt">M</span> <span class="fu">=</span> (<span class="dt">M</span>, <span class="dt">P</span>)
-      toPM <span class="dt">Z</span> <span class="fu">=</span> (<span class="dt">Z</span>, <span class="dt">Z</span>)</code></pre></div>
-<div class="figure">
-<img src="../images/clip.png" />
-
-</div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb12-1"><a href="#cb12-1"></a><span class="kw">instance</span> (<span class="dt">MakeCrossPoint</span> v n, <span class="dt">Vec2</span> v, <span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n)</span>
+<span id="cb12-2"><a href="#cb12-2"></a>    <span class="ot">=&gt;</span> <span class="dt">Clip</span> <span class="dt">FB2</span> v n <span class="kw">where</span></span>
+<span id="cb12-3"><a href="#cb12-3"></a>    splitFacet h f<span class="op">@</span>(<span class="dt">Facet</span> s (a, b)) <span class="ot">=</span> splitCoincident h f othercase</span>
+<span id="cb12-4"><a href="#cb12-4"></a>      <span class="kw">where</span></span>
+<span id="cb12-5"><a href="#cb12-5"></a>      mc     <span class="ot">=</span> makeCrossPoint <span class="op">$</span> vec2 h s</span>
+<span id="cb12-6"><a href="#cb12-6"></a>      go x y <span class="ot">=</span> <span class="dt">Just</span> <span class="op">$</span> <span class="dt">Facet</span> s (x, y)</span>
+<span id="cb12-7"><a href="#cb12-7"></a></span>
+<span id="cb12-8"><a href="#cb12-8"></a>      othercase <span class="ot">=</span> table (orientation a h) (orientation b h)</span>
+<span id="cb12-9"><a href="#cb12-9"></a>      table <span class="dt">P</span> <span class="dt">M</span> <span class="ot">=</span> (mc <span class="op">&gt;&gt;=</span> \c <span class="ot">-&gt;</span> go a c, mc <span class="op">&gt;&gt;=</span> \c <span class="ot">-&gt;</span> go c b)</span>
+<span id="cb12-10"><a href="#cb12-10"></a>      table <span class="dt">M</span> <span class="dt">P</span> <span class="ot">=</span> (mc <span class="op">&gt;&gt;=</span> \c <span class="ot">-&gt;</span> go c b, mc <span class="op">&gt;&gt;=</span> \c <span class="ot">-&gt;</span> go a c)</span>
+<span id="cb12-11"><a href="#cb12-11"></a>      table <span class="dt">P</span> _ <span class="ot">=</span> (<span class="dt">Just</span> f, <span class="dt">Nothing</span>)</span>
+<span id="cb12-12"><a href="#cb12-12"></a>      table _ <span class="dt">P</span> <span class="ot">=</span> (<span class="dt">Just</span> f, <span class="dt">Nothing</span>)</span>
+<span id="cb12-13"><a href="#cb12-13"></a>      table <span class="dt">M</span> _ <span class="ot">=</span> (<span class="dt">Nothing</span>, <span class="dt">Just</span> f)</span>
+<span id="cb12-14"><a href="#cb12-14"></a>      table _ <span class="dt">M</span> <span class="ot">=</span> (<span class="dt">Nothing</span>, <span class="dt">Just</span> f)</span>
+<span id="cb12-15"><a href="#cb12-15"></a>      <span class="co">-- This last case is not needed and is only here for completeness.</span></span>
+<span id="cb12-16"><a href="#cb12-16"></a>      <span class="co">-- It could happen if someone wrongly created a facet with edge</span></span>
+<span id="cb12-17"><a href="#cb12-17"></a>      <span class="co">-- points not lying on the facet plane (line). In such case, that</span></span>
+<span id="cb12-18"><a href="#cb12-18"></a>      <span class="co">-- facet is simply discarded by the splitting function.</span></span>
+<span id="cb12-19"><a href="#cb12-19"></a>      table <span class="dt">Z</span> <span class="dt">Z</span> <span class="ot">=</span> (<span class="dt">Nothing</span>, <span class="dt">Nothing</span>)</span>
+<span id="cb12-20"><a href="#cb12-20"></a></span>
+<span id="cb12-21"><a href="#cb12-21"></a><span class="ot">splitCoincident ::</span> (<span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n)</span>
+<span id="cb12-22"><a href="#cb12-22"></a>    <span class="ot">=&gt;</span> <span class="dt">Plane</span> v n <span class="ot">-&gt;</span> <span class="dt">Facet</span> b v n</span>
+<span id="cb12-23"><a href="#cb12-23"></a>    <span class="ot">-&gt;</span> (<span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n), <span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n))</span>
+<span id="cb12-24"><a href="#cb12-24"></a>    <span class="ot">-&gt;</span> (<span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n), <span class="dt">Maybe</span> (<span class="dt">Facet</span> b v n))</span>
+<span id="cb12-25"><a href="#cb12-25"></a>splitCoincident h f<span class="op">@</span>(<span class="dt">Facet</span> s _) othercase <span class="ot">=</span> <span class="kw">case</span> planesRelation h s <span class="kw">of</span></span>
+<span id="cb12-26"><a href="#cb12-26"></a>    <span class="dt">Parallel</span> <span class="dt">CoIncident</span>   <span class="dt">CoOriented</span> <span class="ot">-&gt;</span> (<span class="dt">Just</span> f, <span class="dt">Nothing</span>)</span>
+<span id="cb12-27"><a href="#cb12-27"></a>    <span class="dt">Parallel</span> <span class="dt">CoIncident</span> <span class="dt">AntiOriented</span> <span class="ot">-&gt;</span> (<span class="dt">Nothing</span>, <span class="dt">Just</span> f)</span>
+<span id="cb12-28"><a href="#cb12-28"></a>    _ <span class="ot">-&gt;</span> othercase</span></code></pre></div>
+<p>Splitting a 3d facet is a bit more meticulous, that’s why I’m going to present here a slightly simplified version based on clipping: First we handle the coincident case with the <code>splitCoincident</code> and all positive (negative) with some possible zeros cases similarly how we did it in the 2d case. Whats left is a case where the splitting plane goes through the facet. For that we clip the boundary twice with signs flipped for the minus side with the <code>clipFast</code> function that I’ll explain next.</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb13-1"><a href="#cb13-1"></a><span class="kw">instance</span> (<span class="dt">MakeCrossPoint</span> v n, <span class="dt">Vec3</span> v, <span class="dt">Foldable</span> v, <span class="dt">Num</span> n, <span class="dt">EqZero</span> n)</span>
+<span id="cb13-2"><a href="#cb13-2"></a>    <span class="ot">=&gt;</span> <span class="dt">Clip</span> (<span class="dt">FB2</span> v n) v n <span class="kw">where</span></span>
+<span id="cb13-3"><a href="#cb13-3"></a>    splitFacet h f<span class="op">@</span>(<span class="dt">Facet</span> s ps) <span class="ot">=</span> splitCoincident h f othercase</span>
+<span id="cb13-4"><a href="#cb13-4"></a>      <span class="kw">where</span></span>
+<span id="cb13-5"><a href="#cb13-5"></a>      othercase</span>
+<span id="cb13-6"><a href="#cb13-6"></a>        <span class="op">|</span> <span class="fu">all</span> (\x <span class="ot">-&gt;</span> x <span class="op">==</span> <span class="dt">P</span> <span class="op">||</span> x <span class="op">==</span> <span class="dt">Z</span>) sP <span class="ot">=</span> (<span class="dt">Just</span> f, <span class="dt">Nothing</span>)</span>
+<span id="cb13-7"><a href="#cb13-7"></a>        <span class="op">|</span> <span class="fu">all</span> (\x <span class="ot">-&gt;</span> x <span class="op">==</span> <span class="dt">M</span> <span class="op">||</span> x <span class="op">==</span> <span class="dt">Z</span>) sM <span class="ot">=</span> (<span class="dt">Nothing</span>, <span class="dt">Just</span> f)</span>
+<span id="cb13-8"><a href="#cb13-8"></a>        <span class="op">|</span> <span class="fu">otherwise</span>                       <span class="ot">=</span> (go sP, go sM)</span>
+<span id="cb13-9"><a href="#cb13-9"></a></span>
+<span id="cb13-10"><a href="#cb13-10"></a>      go sS <span class="ot">=</span> mkFacet <span class="op">$</span> clipFast mkP h sS ps</span>
+<span id="cb13-11"><a href="#cb13-11"></a>      mkFacet ops<span class="op">@</span>(_<span class="op">:</span>_<span class="op">:</span>_<span class="op">:</span>_) <span class="ot">=</span> <span class="dt">Just</span> <span class="op">$</span> <span class="dt">Facet</span> s ops</span>
+<span id="cb13-12"><a href="#cb13-12"></a>      mkFacet _             <span class="ot">=</span> <span class="dt">Nothing</span></span>
+<span id="cb13-13"><a href="#cb13-13"></a>      mkP v <span class="ot">=</span> makeCrossPoint <span class="op">$</span> vec3 s h v</span>
+<span id="cb13-14"><a href="#cb13-14"></a></span>
+<span id="cb13-15"><a href="#cb13-15"></a>      (sP, sM) <span class="ot">=</span> <span class="fu">unzip</span> <span class="op">$</span> <span class="fu">map</span> (toPM <span class="op">.</span> <span class="fu">flip</span> orientation h <span class="op">.</span> <span class="fu">fst</span>) ps</span>
+<span id="cb13-16"><a href="#cb13-16"></a>      toPM <span class="dt">P</span> <span class="ot">=</span> (<span class="dt">P</span>, <span class="dt">M</span>)</span>
+<span id="cb13-17"><a href="#cb13-17"></a>      toPM <span class="dt">M</span> <span class="ot">=</span> (<span class="dt">M</span>, <span class="dt">P</span>)</span>
+<span id="cb13-18"><a href="#cb13-18"></a>      toPM <span class="dt">Z</span> <span class="ot">=</span> (<span class="dt">Z</span>, <span class="dt">Z</span>)</span></code></pre></div>
+<p><img src="../images/clip.png" /></p>
 <p>The diagram above outlines all nine cases that we have to handle in the <code>clipFast</code> function. However - since we are using that function in the context where the boundary actually needs clipping - we can simplify that to just five cases as shown in the <code>table</code> expression below. We then just pipe all point-plane pairs through it to get the resulting clipped boundary:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">clipFast
-<span class="ot">    ::</span> (p <span class="ot">-&gt;</span> <span class="dt">Maybe</span> c) <span class="co">-- ^ Make CrossPoint from Plane V</span>
-    <span class="ot">-&gt;</span> p              <span class="co">-- ^ Clipping Plane H</span>
-    <span class="ot">-&gt;</span> [<span class="dt">Sign</span>]         <span class="co">-- ^ Points signs relative to H</span>
-    <span class="ot">-&gt;</span> [(c, p)]       <span class="co">-- ^ Boundary</span>
-    <span class="ot">-&gt;</span> [(c, p)]       <span class="co">-- ^ Resulting boundary</span>
-clipFast mkP h signs points <span class="fu">=</span> foldr (<span class="fu">.</span>) id out []
-    <span class="kw">where</span>
-    out <span class="fu">=</span> zipWith3 table points signs (drop <span class="dv">1</span> <span class="fu">$</span> cycle signs)
-
-    table (_, v)    <span class="dt">M</span> <span class="dt">P</span> <span class="fu">=</span> mkC v v
-    table _         <span class="dt">M</span> _ <span class="fu">=</span> id
-    table (p, _)    <span class="dt">Z</span> <span class="dt">M</span> <span class="fu">=</span> ((p,h)<span class="fu">:</span>)
-    table pv<span class="fu">@</span>(_, v) <span class="dt">P</span> <span class="dt">M</span> <span class="fu">=</span> (pv<span class="fu">:</span>) <span class="fu">.</span> mkC v h
-    table pv        _ _ <span class="fu">=</span> (pv<span class="fu">:</span>)
-
-    mkC v f <span class="fu">=</span> <span class="kw">case</span> mkP v <span class="kw">of</span>
-        <span class="dt">Nothing</span> <span class="ot">-&gt;</span> id
-        <span class="dt">Just</span> c  <span class="ot">-&gt;</span> ((c, f)<span class="fu">:</span>)</code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb14-1"><a href="#cb14-1"></a>clipFast</span>
+<span id="cb14-2"><a href="#cb14-2"></a><span class="ot">    ::</span> (p <span class="ot">-&gt;</span> <span class="dt">Maybe</span> c) <span class="co">-- ^ Make CrossPoint from Plane V</span></span>
+<span id="cb14-3"><a href="#cb14-3"></a>    <span class="ot">-&gt;</span> p              <span class="co">-- ^ Clipping Plane H</span></span>
+<span id="cb14-4"><a href="#cb14-4"></a>    <span class="ot">-&gt;</span> [<span class="dt">Sign</span>]         <span class="co">-- ^ Points signs relative to H</span></span>
+<span id="cb14-5"><a href="#cb14-5"></a>    <span class="ot">-&gt;</span> [(c, p)]       <span class="co">-- ^ Boundary</span></span>
+<span id="cb14-6"><a href="#cb14-6"></a>    <span class="ot">-&gt;</span> [(c, p)]       <span class="co">-- ^ Resulting boundary</span></span>
+<span id="cb14-7"><a href="#cb14-7"></a>clipFast mkP h signs points <span class="ot">=</span> <span class="fu">foldr</span> (<span class="op">.</span>) <span class="fu">id</span> out []</span>
+<span id="cb14-8"><a href="#cb14-8"></a>    <span class="kw">where</span></span>
+<span id="cb14-9"><a href="#cb14-9"></a>    out <span class="ot">=</span> <span class="fu">zipWith3</span> table points signs (<span class="fu">drop</span> <span class="dv">1</span> <span class="op">$</span> <span class="fu">cycle</span> signs)</span>
+<span id="cb14-10"><a href="#cb14-10"></a></span>
+<span id="cb14-11"><a href="#cb14-11"></a>    table (_, v)    <span class="dt">M</span> <span class="dt">P</span> <span class="ot">=</span> mkC v v</span>
+<span id="cb14-12"><a href="#cb14-12"></a>    table _         <span class="dt">M</span> _ <span class="ot">=</span> <span class="fu">id</span></span>
+<span id="cb14-13"><a href="#cb14-13"></a>    table (p, _)    <span class="dt">Z</span> <span class="dt">M</span> <span class="ot">=</span> ((p,h)<span class="op">:</span>)</span>
+<span id="cb14-14"><a href="#cb14-14"></a>    table pv<span class="op">@</span>(_, v) <span class="dt">P</span> <span class="dt">M</span> <span class="ot">=</span> (pv<span class="op">:</span>) <span class="op">.</span> mkC v h</span>
+<span id="cb14-15"><a href="#cb14-15"></a>    table pv        _ _ <span class="ot">=</span> (pv<span class="op">:</span>)</span>
+<span id="cb14-16"><a href="#cb14-16"></a></span>
+<span id="cb14-17"><a href="#cb14-17"></a>    mkC v f <span class="ot">=</span> <span class="kw">case</span> mkP v <span class="kw">of</span></span>
+<span id="cb14-18"><a href="#cb14-18"></a>        <span class="dt">Nothing</span> <span class="ot">-&gt;</span> <span class="fu">id</span></span>
+<span id="cb14-19"><a href="#cb14-19"></a>        <span class="dt">Just</span> c  <span class="ot">-&gt;</span> ((c, f)<span class="op">:</span>)</span></code></pre></div>
 <h3 id="bsp---binary-space-partitioning-tree">BSP - Binary Space Partitioning Tree</h3>
 <p>BSP - structure at the core of this algorithm - a binary tree with planes at nodes partitioning the space and green/red colored leaves marking inside/outside of the enveloped volume.</p>
-<div class="figure">
-<img src="../images/set-and-tree-rep.png" />
-
-</div>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">BinaryTree</span> l n
-   <span class="fu">=</span> <span class="dt">Node</span> (<span class="dt">BinaryTree</span> l n) <span class="fu">!</span>n (<span class="dt">BinaryTree</span> l n)
-   <span class="fu">|</span> <span class="dt">Leaf</span> <span class="fu">!</span>l
-
-<span class="kw">data</span> <span class="dt">LeafColor</span> <span class="fu">=</span> <span class="dt">Green</span> <span class="fu">|</span> <span class="dt">Red</span>
-<span class="kw">type</span> <span class="dt">BSP</span> <span class="fu">=</span> <span class="dt">BinaryTree</span> <span class="dt">LeafColor</span>
-
-pattern <span class="dt">In</span>  <span class="fu">=</span> <span class="dt">Leaf</span> <span class="dt">Green</span>
-pattern <span class="dt">Out</span> <span class="fu">=</span> <span class="dt">Leaf</span> <span class="dt">Red</span>
-
-<span class="ot">swapColor ::</span> <span class="dt">LeafColor</span> <span class="ot">-&gt;</span> <span class="dt">LeafColor</span>
-swapColor <span class="dt">Green</span> <span class="fu">=</span> <span class="dt">Red</span>
-swapColor <span class="dt">Red</span>   <span class="fu">=</span> <span class="dt">Green</span>
-
-<span class="co">-- Complementary set</span>
-<span class="ot">cmp ::</span> <span class="dt">BSP</span> a <span class="ot">-&gt;</span> <span class="dt">BSP</span> a
-cmp <span class="fu">=</span> first swapColor</code></pre></div>
+<p><img src="../images/set-and-tree-rep.png" /></p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb15-1"><a href="#cb15-1"></a><span class="kw">data</span> <span class="dt">BinaryTree</span> l n</span>
+<span id="cb15-2"><a href="#cb15-2"></a>   <span class="ot">=</span> <span class="dt">Node</span> (<span class="dt">BinaryTree</span> l n) <span class="op">!</span>n (<span class="dt">BinaryTree</span> l n)</span>
+<span id="cb15-3"><a href="#cb15-3"></a>   <span class="op">|</span> <span class="dt">Leaf</span> <span class="op">!</span>l</span>
+<span id="cb15-4"><a href="#cb15-4"></a></span>
+<span id="cb15-5"><a href="#cb15-5"></a><span class="kw">data</span> <span class="dt">LeafColor</span> <span class="ot">=</span> <span class="dt">Green</span> <span class="op">|</span> <span class="dt">Red</span></span>
+<span id="cb15-6"><a href="#cb15-6"></a><span class="kw">type</span> <span class="dt">BSP</span> <span class="ot">=</span> <span class="dt">BinaryTree</span> <span class="dt">LeafColor</span></span>
+<span id="cb15-7"><a href="#cb15-7"></a></span>
+<span id="cb15-8"><a href="#cb15-8"></a><span class="kw">pattern</span> <span class="dt">In</span>  <span class="ot">=</span> <span class="dt">Leaf</span> <span class="dt">Green</span></span>
+<span id="cb15-9"><a href="#cb15-9"></a><span class="kw">pattern</span> <span class="dt">Out</span> <span class="ot">=</span> <span class="dt">Leaf</span> <span class="dt">Red</span></span>
+<span id="cb15-10"><a href="#cb15-10"></a></span>
+<span id="cb15-11"><a href="#cb15-11"></a><span class="ot">swapColor ::</span> <span class="dt">LeafColor</span> <span class="ot">-&gt;</span> <span class="dt">LeafColor</span></span>
+<span id="cb15-12"><a href="#cb15-12"></a>swapColor <span class="dt">Green</span> <span class="ot">=</span> <span class="dt">Red</span></span>
+<span id="cb15-13"><a href="#cb15-13"></a>swapColor <span class="dt">Red</span>   <span class="ot">=</span> <span class="dt">Green</span></span>
+<span id="cb15-14"><a href="#cb15-14"></a></span>
+<span id="cb15-15"><a href="#cb15-15"></a><span class="co">-- Complementary set</span></span>
+<span id="cb15-16"><a href="#cb15-16"></a><span class="ot">cmp ::</span> <span class="dt">BSP</span> a <span class="ot">-&gt;</span> <span class="dt">BSP</span> a</span>
+<span id="cb15-17"><a href="#cb15-17"></a>cmp <span class="ot">=</span> first swapColor</span></code></pre></div>
 <p>To construct BSP from a list of facets we will take the first facet and partition the rest by its plane, then repeat that process recursively for all sub-nodes. For the non internal planes we will arbitrary decide that the positive, internal half-space will be on the left and the negative, external half-space on the right:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">constructBSP ::</span> <span class="dt">Clip</span> b v n <span class="ot">=&gt;</span> [<span class="dt">Facet</span> b v n] <span class="ot">-&gt;</span> <span class="dt">BSP</span> (<span class="dt">Plane</span> v n)
-constructBSP []               <span class="fu">=</span> <span class="dt">Out</span>
-constructBSP ((<span class="dt">Facet</span> s _)<span class="fu">:</span>fs) <span class="fu">=</span> <span class="kw">case</span> splitWith (splitFacet s) fs <span class="kw">of</span>
-    ([], rs) <span class="ot">-&gt;</span> <span class="dt">Node</span> <span class="dt">In</span>                s (constructBSP rs)
-    (ls, []) <span class="ot">-&gt;</span> <span class="dt">Node</span> (constructBSP ls) s <span class="dt">Out</span>
-    (ls, rs) <span class="ot">-&gt;</span> <span class="dt">Node</span> (constructBSP ls) s (constructBSP rs)
-
-<span class="ot">splitWith ::</span> (a <span class="ot">-&gt;</span> (<span class="dt">Maybe</span> a, <span class="dt">Maybe</span> a)) <span class="ot">-&gt;</span> [a] <span class="ot">-&gt;</span> ([a], [a])
-splitWith f <span class="fu">=</span> over each catMaybes <span class="fu">.</span> unzip <span class="fu">.</span> map f</code></pre></div>
-<p>Assuming our facets form a well balanced tree, <code>constructBSP</code> should have <span class="math inline">\(O(nlog_2n)\)</span> complexity. However most of the time we won't be dealing with such nice and well behaved tree. For example if the facets represent a boundary of a convex polytope a tree formed by it will be indeed pathological and the complexity will be equal to <span class="math inline">\(O(n^2)\)</span>. That's why it could be a good idea to insert some additional well selected internal splitting planes to reintroduce balance and speed up the construction, though I haven't yet gotten around doing that. Another pathological scenario is when we have an ideally balanced tree but at each level the splitting plane splits all the facets in half. Therefore if we split in 2 at each layer and we have <span class="math inline">\(log_2n\)</span> such layers we have a factor of <span class="math inline">\(2^{log_2n} = n\)</span> such operations for a combined <span class="math inline">\(O(n^2log_2n)\)</span> worst case complexity. I think. I mean when it comes to complexity estimation computer science is sometimes more art then science Morty. Anyways that example would be a rather exceptional one so I think we can simply ignore it. Plus it only shows up during the construction of that BSP, afterwards we still have a well balanced tree so it's even less of an issue.</p>
-<p>Additional note that I'd like to make at this point about potential optimizations is that splitting list of facets by a plane has a great potential for parallelization. Hooking this up to a GPGPU shows opportunity for great wins. I even started playing with <a href="https://github.com/AccelerateHS/accelerate/">accelerate</a> for this exact reason but it's not ready yet. There are some conditionals there obviously, but not that many to be seriously prohibitive and number of boundary points per facet is not uniform so that would require special representation but I don't believe any of that is a serious show stopper. I'll have to investigate that further and will probably write a follow up about my findings in the future.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb16-1"><a href="#cb16-1"></a><span class="ot">constructBSP ::</span> <span class="dt">Clip</span> b v n <span class="ot">=&gt;</span> [<span class="dt">Facet</span> b v n] <span class="ot">-&gt;</span> <span class="dt">BSP</span> (<span class="dt">Plane</span> v n)</span>
+<span id="cb16-2"><a href="#cb16-2"></a>constructBSP []               <span class="ot">=</span> <span class="dt">Out</span></span>
+<span id="cb16-3"><a href="#cb16-3"></a>constructBSP ((<span class="dt">Facet</span> s _)<span class="op">:</span>fs) <span class="ot">=</span> <span class="kw">case</span> splitWith (splitFacet s) fs <span class="kw">of</span></span>
+<span id="cb16-4"><a href="#cb16-4"></a>    ([], rs) <span class="ot">-&gt;</span> <span class="dt">Node</span> <span class="dt">In</span>                s (constructBSP rs)</span>
+<span id="cb16-5"><a href="#cb16-5"></a>    (ls, []) <span class="ot">-&gt;</span> <span class="dt">Node</span> (constructBSP ls) s <span class="dt">Out</span></span>
+<span id="cb16-6"><a href="#cb16-6"></a>    (ls, rs) <span class="ot">-&gt;</span> <span class="dt">Node</span> (constructBSP ls) s (constructBSP rs)</span>
+<span id="cb16-7"><a href="#cb16-7"></a></span>
+<span id="cb16-8"><a href="#cb16-8"></a><span class="ot">splitWith ::</span> (a <span class="ot">-&gt;</span> (<span class="dt">Maybe</span> a, <span class="dt">Maybe</span> a)) <span class="ot">-&gt;</span> [a] <span class="ot">-&gt;</span> ([a], [a])</span>
+<span id="cb16-9"><a href="#cb16-9"></a>splitWith f <span class="ot">=</span> over each catMaybes <span class="op">.</span> <span class="fu">unzip</span> <span class="op">.</span> <span class="fu">map</span> f</span></code></pre></div>
+<p>Assuming our facets form a well balanced tree, <code>constructBSP</code> should have <span class="math inline">\(O(nlog_2n)\)</span> complexity. However most of the time we won’t be dealing with such nice and well behaved tree. For example if the facets represent a boundary of a convex polytope a tree formed by it will be indeed pathological and the complexity will be equal to <span class="math inline">\(O(n^2)\)</span>. That’s why it could be a good idea to insert some additional well selected internal splitting planes to reintroduce balance and speed up the construction, though I haven’t yet gotten around doing that. Another pathological scenario is when we have an ideally balanced tree but at each level the splitting plane splits all the facets in half. Therefore if we split in 2 at each layer and we have <span class="math inline">\(log_2n\)</span> such layers we have a factor of <span class="math inline">\(2^{log_2n} = n\)</span> such operations for a combined <span class="math inline">\(O(n^2log_2n)\)</span> worst case complexity. I think. I mean when it comes to complexity estimation computer science is sometimes more art then science Morty. Anyways that example would be a rather exceptional one so I think we can simply ignore it. Plus it only shows up during the construction of that BSP, afterwards we still have a well balanced tree so it’s even less of an issue.</p>
+<p>Additional note that I’d like to make at this point about potential optimizations is that splitting list of facets by a plane has a great potential for parallelization. Hooking this up to a GPGPU shows opportunity for great wins. I even started playing with <a href="https://github.com/AccelerateHS/accelerate/">accelerate</a> for this exact reason but it’s not ready yet. There are some conditionals there obviously, but not that many to be seriously prohibitive and number of boundary points per facet is not uniform so that would require special representation but I don’t believe any of that is a serious show stopper. I’ll have to investigate that further and will probably write a follow up about my findings in the future.</p>
 <h3 id="set-operations-by-boundary-filtering">Set Operations by Boundary Filtering</h3>
-<p>Originally I have implemented the set operation algorithm by fallowing work of Naylor et al. <span class="citation">[<strong>NAT90</strong>]</span>, <span class="citation">[<strong>BF09</strong>]</span> of merging the BSPs and then extracting boundary at the end. However as I was benchmarking this solution the results were a bit unsatisfactory, though it may have been due to my implementation. Anyway as I was getting tired of trying to optimize that approach I thought of an alternative that I've since christened Boundary Filtering. I haven't really put much work into searching related literature to say if I'm original in this approach (I doubt it since it seems like an obvious thing to do) but that's not what's important here. The important thing is that it goes fast. You gotta go fast.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">Volume</span> b v n <span class="fu">=</span> <span class="dt">Volume</span>
-   {<span class="ot"> volumeFacets ::</span> [<span class="dt">Facet</span> b v n]
-   ,<span class="ot"> volumeTree   ::</span> <span class="dt">BSP</span> (<span class="dt">Plane</span> v n)
-   }
-
-<span class="ot">makeVolume ::</span> <span class="dt">Clip</span> b v n <span class="ot">=&gt;</span> [<span class="dt">Facet</span> b v n] <span class="ot">-&gt;</span> <span class="dt">Volume</span> b v n
-makeVolume fs <span class="fu">=</span> <span class="dt">Volume</span> fs (constructBSP fs)</code></pre></div>
-<p>We have a helper record <code>Volume</code> with list of bounding facets and BSP. To perform set operation <span class="math inline">\(op\)</span> of volume <span class="math inline">\(A\)</span> with volume <span class="math inline">\(B\)</span> we filter the <span class="math inline">\(B\)</span>-facets with <span class="math inline">\(A\)</span>-tree and vice versa (with predicate according to <span class="math inline">\(op\)</span>), then rebuild the tree form resulting facets. Few comments about potential optimizations at this point are in order. The filtering function could use the same optimizations as the <code>constructBSP</code>, therefore it would probably be better to use <code>Vector</code> instead of a list of facets. However for more complex, bigger volumes as the number of facets grow - even if we were to to implement the fully parallelized solution - we will eventually start losing the battle on the asymptotic grounds. That's why it would probably be better to pack the facets into some sort of tree structure (but not in the BSP, I tried that and the constant factors where unacceptable. Probably it would be better to use a structure with axis-aligned separation planes). Or ideally a hybrid solution where leaves of a tree don't hold individual facets but a <span class="math inline">\(n\)</span> vector of facets for some fine-tuned <span class="math inline">\(n\)</span>. Another quite straightforward optimization would be adding axis-aligned bounding boxes in the <code>Volume</code> record, and then preforming the filtering only on the facets (and sub-trees) that are inside the intersection of two AABB's, while simply keeping/removing all of the other facets (depending on the <code>SetOperation</code> predicate). All of these optimizations are in the workings but if I were to wait with writing this post until after implementing them I would probably never finish.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">SetOperation</span>
-   <span class="fu">=</span> <span class="dt">Union</span>
-   <span class="fu">|</span> <span class="dt">Intersection</span>
-   <span class="fu">|</span> <span class="dt">Difference</span>
-   <span class="fu">|</span> <span class="dt">SymmetricDifference</span>
-
-mergeVolumes op volumeA volumeB <span class="fu">=</span> <span class="kw">case</span> op <span class="kw">of</span>
-    <span class="dt">Difference</span>          <span class="ot">-&gt;</span> filterBoth isOut    isInFlip
-    <span class="dt">Intersection</span>        <span class="ot">-&gt;</span> filterBoth isIn     isIn
-    <span class="dt">Union</span>               <span class="ot">-&gt;</span> filterBoth isOut    isOut
-    <span class="dt">SymmetricDifference</span> <span class="ot">-&gt;</span> filterBoth isEither isEither
-    <span class="kw">where</span>
-    isInFlip x fs <span class="fu">=</span> <span class="kw">case</span> x <span class="kw">of</span> <span class="dt">Red</span> <span class="ot">-&gt;</span> []; <span class="dt">Green</span> <span class="ot">-&gt;</span> map flipPlane fs
-    isIn     x fs <span class="fu">=</span> <span class="kw">case</span> x <span class="kw">of</span> <span class="dt">Red</span> <span class="ot">-&gt;</span> []; <span class="dt">Green</span> <span class="ot">-&gt;</span> fs
-    isOut    x fs <span class="fu">=</span> <span class="kw">case</span> x <span class="kw">of</span> <span class="dt">Red</span> <span class="ot">-&gt;</span> fs; <span class="dt">Green</span> <span class="ot">-&gt;</span> []
-    isEither x fs <span class="fu">=</span> <span class="kw">case</span> x <span class="kw">of</span> <span class="dt">Red</span> <span class="ot">-&gt;</span> fs; <span class="dt">Green</span> <span class="ot">-&gt;</span> map flipPlane fs
-
-    <span class="dt">Volume</span> facetsA treeA <span class="fu">=</span> volumeA
-    <span class="dt">Volume</span> facetsB treeB <span class="fu">=</span> volumeB
-
-    filterBoth f g <span class="fu">=</span> makeVolume <span class="fu">$</span>
-        filterWith f facetsA treeB <span class="fu">&lt;&gt;</span>
-        filterWith g facetsB treeA
-
-    filterWith _ [] _ <span class="fu">=</span> []
-    filterWith f fs t <span class="fu">=</span> <span class="kw">case</span> t <span class="kw">of</span>
-        <span class="dt">Leaf</span> x             <span class="ot">-&gt;</span> f x fs
-        <span class="dt">Node</span> treeL p treeR <span class="ot">-&gt;</span>
-            filterWith f partL treeL <span class="fu">&lt;&gt;</span>
-            filterWith f partR treeR
-            <span class="kw">where</span> (partL, partR) <span class="fu">=</span> splitWith (splitFacet p) fs</code></pre></div>
-<p>Additionally instead of reconstructing the whole tree from scratch we could potentially do it incrementally as shown by Thibault et al. <span class="citation">[<strong>TN87</strong>]</span>. Again this is something that I may or may not implement in the future but I thought it would be good to mention (also for my own sake).</p>
+<p>Originally I have implemented the set operation algorithm by fallowing work of Naylor et al. <span class="citation" data-cites="nat90">[<strong>NAT90</strong>]</span>, <span class="citation" data-cites="bf09">[<strong>BF09</strong>]</span> of merging the BSPs and then extracting boundary at the end. However as I was benchmarking this solution the results were a bit unsatisfactory, though it may have been due to my implementation. Anyway as I was getting tired of trying to optimize that approach I thought of an alternative that I’ve since christened Boundary Filtering. I haven’t really put much work into searching related literature to say if I’m original in this approach (I doubt it since it seems like an obvious thing to do) but that’s not what’s important here. The important thing is that it goes fast. You gotta go fast.</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb17-1"><a href="#cb17-1"></a><span class="kw">data</span> <span class="dt">Volume</span> b v n <span class="ot">=</span> <span class="dt">Volume</span></span>
+<span id="cb17-2"><a href="#cb17-2"></a>   {<span class="ot"> volumeFacets ::</span> [<span class="dt">Facet</span> b v n]</span>
+<span id="cb17-3"><a href="#cb17-3"></a>   ,<span class="ot"> volumeTree   ::</span> <span class="dt">BSP</span> (<span class="dt">Plane</span> v n)</span>
+<span id="cb17-4"><a href="#cb17-4"></a>   }</span>
+<span id="cb17-5"><a href="#cb17-5"></a></span>
+<span id="cb17-6"><a href="#cb17-6"></a><span class="ot">makeVolume ::</span> <span class="dt">Clip</span> b v n <span class="ot">=&gt;</span> [<span class="dt">Facet</span> b v n] <span class="ot">-&gt;</span> <span class="dt">Volume</span> b v n</span>
+<span id="cb17-7"><a href="#cb17-7"></a>makeVolume fs <span class="ot">=</span> <span class="dt">Volume</span> fs (constructBSP fs)</span></code></pre></div>
+<p>We have a helper record <code>Volume</code> with list of bounding facets and BSP. To perform set operation <span class="math inline">\(op\)</span> of volume <span class="math inline">\(A\)</span> with volume <span class="math inline">\(B\)</span> we filter the <span class="math inline">\(B\)</span>-facets with <span class="math inline">\(A\)</span>-tree and vice versa (with predicate according to <span class="math inline">\(op\)</span>), then rebuild the tree form resulting facets. Few comments about potential optimizations at this point are in order. The filtering function could use the same optimizations as the <code>constructBSP</code>, therefore it would probably be better to use <code>Vector</code> instead of a list of facets. However for more complex, bigger volumes as the number of facets grow - even if we were to to implement the fully parallelized solution - we will eventually start losing the battle on the asymptotic grounds. That’s why it would probably be better to pack the facets into some sort of tree structure (but not in the BSP, I tried that and the constant factors where unacceptable. Probably it would be better to use a structure with axis-aligned separation planes). Or ideally a hybrid solution where leaves of a tree don’t hold individual facets but a <span class="math inline">\(n\)</span> vector of facets for some fine-tuned <span class="math inline">\(n\)</span>. Another quite straightforward optimization would be adding axis-aligned bounding boxes in the <code>Volume</code> record, and then preforming the filtering only on the facets (and sub-trees) that are inside the intersection of two AABB’s, while simply keeping/removing all of the other facets (depending on the <code>SetOperation</code> predicate). All of these optimizations are in the workings but if I were to wait with writing this post until after implementing them I would probably never finish.</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb18-1"><a href="#cb18-1"></a><span class="kw">data</span> <span class="dt">SetOperation</span></span>
+<span id="cb18-2"><a href="#cb18-2"></a>   <span class="ot">=</span> <span class="dt">Union</span></span>
+<span id="cb18-3"><a href="#cb18-3"></a>   <span class="op">|</span> <span class="dt">Intersection</span></span>
+<span id="cb18-4"><a href="#cb18-4"></a>   <span class="op">|</span> <span class="dt">Difference</span></span>
+<span id="cb18-5"><a href="#cb18-5"></a>   <span class="op">|</span> <span class="dt">SymmetricDifference</span></span>
+<span id="cb18-6"><a href="#cb18-6"></a></span>
+<span id="cb18-7"><a href="#cb18-7"></a>mergeVolumes op volumeA volumeB <span class="ot">=</span> <span class="kw">case</span> op <span class="kw">of</span></span>
+<span id="cb18-8"><a href="#cb18-8"></a>    <span class="dt">Difference</span>          <span class="ot">-&gt;</span> filterBoth isOut    isInFlip</span>
+<span id="cb18-9"><a href="#cb18-9"></a>    <span class="dt">Intersection</span>        <span class="ot">-&gt;</span> filterBoth isIn     isIn</span>
+<span id="cb18-10"><a href="#cb18-10"></a>    <span class="dt">Union</span>               <span class="ot">-&gt;</span> filterBoth isOut    isOut</span>
+<span id="cb18-11"><a href="#cb18-11"></a>    <span class="dt">SymmetricDifference</span> <span class="ot">-&gt;</span> filterBoth isEither isEither</span>
+<span id="cb18-12"><a href="#cb18-12"></a>    <span class="kw">where</span></span>
+<span id="cb18-13"><a href="#cb18-13"></a>    isInFlip x fs <span class="ot">=</span> <span class="kw">case</span> x <span class="kw">of</span> <span class="dt">Red</span> <span class="ot">-&gt;</span> []; <span class="dt">Green</span> <span class="ot">-&gt;</span> <span class="fu">map</span> flipPlane fs</span>
+<span id="cb18-14"><a href="#cb18-14"></a>    isIn     x fs <span class="ot">=</span> <span class="kw">case</span> x <span class="kw">of</span> <span class="dt">Red</span> <span class="ot">-&gt;</span> []; <span class="dt">Green</span> <span class="ot">-&gt;</span> fs</span>
+<span id="cb18-15"><a href="#cb18-15"></a>    isOut    x fs <span class="ot">=</span> <span class="kw">case</span> x <span class="kw">of</span> <span class="dt">Red</span> <span class="ot">-&gt;</span> fs; <span class="dt">Green</span> <span class="ot">-&gt;</span> []</span>
+<span id="cb18-16"><a href="#cb18-16"></a>    isEither x fs <span class="ot">=</span> <span class="kw">case</span> x <span class="kw">of</span> <span class="dt">Red</span> <span class="ot">-&gt;</span> fs; <span class="dt">Green</span> <span class="ot">-&gt;</span> <span class="fu">map</span> flipPlane fs</span>
+<span id="cb18-17"><a href="#cb18-17"></a></span>
+<span id="cb18-18"><a href="#cb18-18"></a>    <span class="dt">Volume</span> facetsA treeA <span class="ot">=</span> volumeA</span>
+<span id="cb18-19"><a href="#cb18-19"></a>    <span class="dt">Volume</span> facetsB treeB <span class="ot">=</span> volumeB</span>
+<span id="cb18-20"><a href="#cb18-20"></a></span>
+<span id="cb18-21"><a href="#cb18-21"></a>    filterBoth f g <span class="ot">=</span> makeVolume <span class="op">$</span></span>
+<span id="cb18-22"><a href="#cb18-22"></a>        filterWith f facetsA treeB <span class="op">&lt;&gt;</span></span>
+<span id="cb18-23"><a href="#cb18-23"></a>        filterWith g facetsB treeA</span>
+<span id="cb18-24"><a href="#cb18-24"></a></span>
+<span id="cb18-25"><a href="#cb18-25"></a>    filterWith _ [] _ <span class="ot">=</span> []</span>
+<span id="cb18-26"><a href="#cb18-26"></a>    filterWith f fs t <span class="ot">=</span> <span class="kw">case</span> t <span class="kw">of</span></span>
+<span id="cb18-27"><a href="#cb18-27"></a>        <span class="dt">Leaf</span> x             <span class="ot">-&gt;</span> f x fs</span>
+<span id="cb18-28"><a href="#cb18-28"></a>        <span class="dt">Node</span> treeL p treeR <span class="ot">-&gt;</span></span>
+<span id="cb18-29"><a href="#cb18-29"></a>            filterWith f partL treeL <span class="op">&lt;&gt;</span></span>
+<span id="cb18-30"><a href="#cb18-30"></a>            filterWith f partR treeR</span>
+<span id="cb18-31"><a href="#cb18-31"></a>            <span class="kw">where</span> (partL, partR) <span class="ot">=</span> splitWith (splitFacet p) fs</span></code></pre></div>
+<p>Additionally instead of reconstructing the whole tree from scratch we could potentially do it incrementally as shown by Thibault et al. <span class="citation" data-cites="tn87">[<strong>TN87</strong>]</span>. Again this is something that I may or may not implement in the future but I thought it would be good to mention (also for my own sake).</p>
 <h3 id="set-operations-by-bsp-merging">Set Operations by BSP Merging</h3>
-<p>Another approach is the one I've mentioned in the previous section; merging BSPs and than reconstructing boundary representation from resulting space partitioning tree. This approach scales better in comparison to the unoptimized Boundary Filtering with list of facets. However the constant factors, at least in my implementation, ended up being a bit to big. And you still need to reconstruct the boundary at the end which at the very least is a pain.</p>
-<p>However now that I've sat down to write it all up I noticed an obvious place where I've been unnecessarily recomputing things, so there actually may be a way to make this approach performant. The more I write of this post the more it turns into a big TODO list.</p>
-<p>Anyway, let's move to the algorithm itself. So, to make a very high level description, it comes down to recursively partitioning one BSP by the splitting planes of the other, applying a set operation at the leaves and then putting it all back together.</p>
-<p>To partition a BSP by a plane we will need to know the regions that the BSP partitions the space into. Now that I was able to reflect on it I've realised that it would be much faster to have these regions pre-calculated within the nodes of the BSP instead of recalculating them every time... well I'll rewrite it like that latter, for now it is what it is. We will represent a region by a list of facets. To calculate subregions of BSP we start with initial region the Universe Box that is some Very Large™ (hyper-)cube. Then we recursively split that region by the partitioning planes of the BSP. Splitting a region by a plane is equal to splitting all of the facets representing the region and closing them with an additional &quot;lid&quot; facet made from appropriately clipped splitting plane (or even better by reconstructing it from the newly created points and edges, but that would probably require some representation changes to <code>Plane</code> and <code>CrossPoint</code> with some additional hash values so let's not go there for now)</p>
+<p>Another approach is the one I’ve mentioned in the previous section; merging BSPs and than reconstructing boundary representation from resulting space partitioning tree. This approach scales better in comparison to the unoptimized Boundary Filtering with list of facets. However the constant factors, at least in my implementation, ended up being a bit to big. And you still need to reconstruct the boundary at the end which at the very least is a pain.</p>
+<p>However now that I’ve sat down to write it all up I noticed an obvious place where I’ve been unnecessarily recomputing things, so there actually may be a way to make this approach performant. The more I write of this post the more it turns into a big TODO list.</p>
+<p>Anyway, let’s move to the algorithm itself. So, to make a very high level description, it comes down to recursively partitioning one BSP by the splitting planes of the other, applying a set operation at the leaves and then putting it all back together.</p>
+<p>To partition a BSP by a plane we will need to know the regions that the BSP partitions the space into. Now that I was able to reflect on it I’ve realised that it would be much faster to have these regions pre-calculated within the nodes of the BSP instead of recalculating them every time… well I’ll rewrite it like that latter, for now it is what it is. We will represent a region by a list of facets. To calculate subregions of BSP we start with initial region the Universe Box that is some Very Large™ (hyper-)cube. Then we recursively split that region by the partitioning planes of the BSP. Splitting a region by a plane is equal to splitting all of the facets representing the region and closing them with an additional “lid” facet made from appropriately clipped splitting plane (or even better by reconstructing it from the newly created points and edges, but that would probably require some representation changes to <code>Plane</code> and <code>CrossPoint</code> with some additional hash values so let’s not go there for now)</p>
 <p>Anyway, there are 3 cases that we need to handle here:</p>
-<ol style="list-style-type: decimal">
+<ol type="1">
 <li>The partitioning plane <span class="math inline">\(p\)</span> and the node splitting plane <span class="math inline">\(f\)</span> are coincident, so we partition the node in half and return subtrees on the sides depending on if the planes are co-oriented or anti-oriented,</li>
 <li>The planes are crossing so we recursively partition the subtrees,</li>
 <li>The partitioning plane <span class="math inline">\(p\)</span> is splitting only one of the regions so we recoursively partition only that sub-tree (there are 4 sub-cases here that are represented in the diagram below).</li>
 </ol>
-<div class="figure">
-<img src="../images/partition.png" />
-
-</div>
+<p><img src="../images/partition.png" /></p>
 <p>As you can see you can decide which of the four sub-cases we are dealing with by testing which of the four regions are empty. For example if <code>regionPR</code> (plus right) is empty that is the right half-space of plane <span class="math inline">\(p\)</span> and plus half-space of plane <span class="math inline">\(f\)</span> are not intersecting (within the node region) we can conclude from that the plane <span class="math inline">\(p\)</span> is partitioning the minus subtree of the node. So we return the node <span class="math inline">\(f\)</span> with whole plus subtree and left part of a minus subtree on the left side and right part of the minus subtree on the right.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">partitionBSP _       _ (<span class="dt">Leaf</span> c)             <span class="fu">=</span> (<span class="dt">Leaf</span> c, <span class="dt">Leaf</span> c)
-partitionBSP regions p (<span class="dt">Node</span> treeP f treeM) <span class="fu">=</span> <span class="kw">case</span> planesRelation p f <span class="kw">of</span>
-    <span class="dt">Parallel</span> <span class="dt">CoIncident</span>   <span class="dt">CoOriented</span> <span class="ot">-&gt;</span> (treeP, treeM)
-    <span class="dt">Parallel</span> <span class="dt">CoIncident</span> <span class="dt">AntiOriented</span> <span class="ot">-&gt;</span> (treeM, treeP)
-    othercase <span class="ot">-&gt;</span> <span class="kw">if</span>
-      <span class="fu">|</span> null regionPR <span class="ot">-&gt;</span> (<span class="dt">Node</span> treeP f treeML, treeMR)
-      <span class="fu">|</span> null regionMR <span class="ot">-&gt;</span> (<span class="dt">Node</span> treePL f treeM, treePR)
-      <span class="fu">|</span> null regionPL <span class="ot">-&gt;</span> (treeML, <span class="dt">Node</span> treeP f treeMR)
-      <span class="fu">|</span> null regionML <span class="ot">-&gt;</span> (treePL, <span class="dt">Node</span> treePR f treeM)
-
-      <span class="fu">|</span> otherwise     <span class="ot">-&gt;</span> (<span class="dt">Node</span> treePL f treeML, <span class="dt">Node</span> treePR f treeMR)
-    <span class="kw">where</span>
-    (treePL, treePR) <span class="fu">=</span> partitionBSP (regionPL, regionPR) p treeP
-    (treeML, treeMR) <span class="fu">=</span> partitionBSP (regionML, regionMR) p treeM
-
-    (regionP , regionM ) <span class="fu">=</span> regions
-    (regionPL, regionPR) <span class="fu">=</span> splitRegion p regionP
-    (regionML, regionMR) <span class="fu">=</span> splitRegion p regionM</code></pre></div>
-<p>Next part needed is when we have descended down to leaves in one of the BSPs and it's time to apply the <code>SetOperation</code>. There is nothing really complex here and anyone could figure this out themselves, but I've made a fancy diagram that neatly translates into the Haskell source, so be sure to appreciate it.</p>
-<div class="figure">
-<img src="../images/equations.png" />
-
-</div>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">setOperation ::</span> <span class="dt">SetOperation</span> <span class="ot">-&gt;</span> <span class="dt">BSP</span> a <span class="ot">-&gt;</span> <span class="dt">BSP</span> a <span class="ot">-&gt;</span> <span class="dt">BSP</span> a
-
-setOperation    <span class="dt">Union</span>                  <span class="dt">In</span>   set <span class="fu">=</span> <span class="dt">In</span>
-setOperation    <span class="dt">Union</span>                  <span class="dt">Out</span>  set <span class="fu">=</span> set
-setOperation    <span class="dt">Union</span>                  set  <span class="dt">In</span>  <span class="fu">=</span> <span class="dt">In</span>
-setOperation    <span class="dt">Union</span>                  set  <span class="dt">Out</span> <span class="fu">=</span> set
-
-setOperation    <span class="dt">Intersection</span>           <span class="dt">In</span>   set <span class="fu">=</span> set
-setOperation    <span class="dt">Intersection</span>           <span class="dt">Out</span>  set <span class="fu">=</span> <span class="dt">Out</span>
-setOperation    <span class="dt">Intersection</span>           set  <span class="dt">In</span>  <span class="fu">=</span> set
-setOperation    <span class="dt">Intersection</span>           set  <span class="dt">Out</span> <span class="fu">=</span> <span class="dt">Out</span>
-
-setOperation    <span class="dt">Difference</span>             <span class="dt">In</span>   set <span class="fu">=</span> cmp set
-setOperation    <span class="dt">Difference</span>             <span class="dt">Out</span>  set <span class="fu">=</span> <span class="dt">Out</span>
-setOperation    <span class="dt">Difference</span>             set  <span class="dt">In</span>  <span class="fu">=</span> <span class="dt">Out</span>
-setOperation    <span class="dt">Difference</span>             set  <span class="dt">Out</span> <span class="fu">=</span> set
-
-setOperation    <span class="dt">SymmetricDifference</span>    <span class="dt">In</span>   set <span class="fu">=</span> cmp set
-setOperation    <span class="dt">SymmetricDifference</span>    <span class="dt">Out</span>  set <span class="fu">=</span> set
-setOperation    <span class="dt">SymmetricDifference</span>    set  <span class="dt">In</span>  <span class="fu">=</span> cmp set
-setOperation    <span class="dt">SymmetricDifference</span>    set  <span class="dt">Out</span> <span class="fu">=</span> set</code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb19-1"><a href="#cb19-1"></a>partitionBSP _       _ (<span class="dt">Leaf</span> c)             <span class="ot">=</span> (<span class="dt">Leaf</span> c, <span class="dt">Leaf</span> c)</span>
+<span id="cb19-2"><a href="#cb19-2"></a>partitionBSP regions p (<span class="dt">Node</span> treeP f treeM) <span class="ot">=</span> <span class="kw">case</span> planesRelation p f <span class="kw">of</span></span>
+<span id="cb19-3"><a href="#cb19-3"></a>    <span class="dt">Parallel</span> <span class="dt">CoIncident</span>   <span class="dt">CoOriented</span> <span class="ot">-&gt;</span> (treeP, treeM)</span>
+<span id="cb19-4"><a href="#cb19-4"></a>    <span class="dt">Parallel</span> <span class="dt">CoIncident</span> <span class="dt">AntiOriented</span> <span class="ot">-&gt;</span> (treeM, treeP)</span>
+<span id="cb19-5"><a href="#cb19-5"></a>    othercase <span class="ot">-&gt;</span> <span class="kw">if</span></span>
+<span id="cb19-6"><a href="#cb19-6"></a>      <span class="op">|</span> <span class="fu">null</span> regionPR <span class="ot">-&gt;</span> (<span class="dt">Node</span> treeP f treeML, treeMR)</span>
+<span id="cb19-7"><a href="#cb19-7"></a>      <span class="op">|</span> <span class="fu">null</span> regionMR <span class="ot">-&gt;</span> (<span class="dt">Node</span> treePL f treeM, treePR)</span>
+<span id="cb19-8"><a href="#cb19-8"></a>      <span class="op">|</span> <span class="fu">null</span> regionPL <span class="ot">-&gt;</span> (treeML, <span class="dt">Node</span> treeP f treeMR)</span>
+<span id="cb19-9"><a href="#cb19-9"></a>      <span class="op">|</span> <span class="fu">null</span> regionML <span class="ot">-&gt;</span> (treePL, <span class="dt">Node</span> treePR f treeM)</span>
+<span id="cb19-10"><a href="#cb19-10"></a></span>
+<span id="cb19-11"><a href="#cb19-11"></a>      <span class="op">|</span> <span class="fu">otherwise</span>     <span class="ot">-&gt;</span> (<span class="dt">Node</span> treePL f treeML, <span class="dt">Node</span> treePR f treeMR)</span>
+<span id="cb19-12"><a href="#cb19-12"></a>    <span class="kw">where</span></span>
+<span id="cb19-13"><a href="#cb19-13"></a>    (treePL, treePR) <span class="ot">=</span> partitionBSP (regionPL, regionPR) p treeP</span>
+<span id="cb19-14"><a href="#cb19-14"></a>    (treeML, treeMR) <span class="ot">=</span> partitionBSP (regionML, regionMR) p treeM</span>
+<span id="cb19-15"><a href="#cb19-15"></a></span>
+<span id="cb19-16"><a href="#cb19-16"></a>    (regionP , regionM ) <span class="ot">=</span> regions</span>
+<span id="cb19-17"><a href="#cb19-17"></a>    (regionPL, regionPR) <span class="ot">=</span> splitRegion p regionP</span>
+<span id="cb19-18"><a href="#cb19-18"></a>    (regionML, regionMR) <span class="ot">=</span> splitRegion p regionM</span></code></pre></div>
+<p>Next part needed is when we have descended down to leaves in one of the BSPs and it’s time to apply the <code>SetOperation</code>. There is nothing really complex here and anyone could figure this out themselves, but I’ve made a fancy diagram that neatly translates into the Haskell source, so be sure to appreciate it.</p>
+<p><img src="../images/equations.png" /></p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb20-1"><a href="#cb20-1"></a><span class="ot">setOperation ::</span> <span class="dt">SetOperation</span> <span class="ot">-&gt;</span> <span class="dt">BSP</span> a <span class="ot">-&gt;</span> <span class="dt">BSP</span> a <span class="ot">-&gt;</span> <span class="dt">BSP</span> a</span>
+<span id="cb20-2"><a href="#cb20-2"></a></span>
+<span id="cb20-3"><a href="#cb20-3"></a>setOperation    <span class="dt">Union</span>                  <span class="dt">In</span>   set <span class="ot">=</span> <span class="dt">In</span></span>
+<span id="cb20-4"><a href="#cb20-4"></a>setOperation    <span class="dt">Union</span>                  <span class="dt">Out</span>  set <span class="ot">=</span> set</span>
+<span id="cb20-5"><a href="#cb20-5"></a>setOperation    <span class="dt">Union</span>                  set  <span class="dt">In</span>  <span class="ot">=</span> <span class="dt">In</span></span>
+<span id="cb20-6"><a href="#cb20-6"></a>setOperation    <span class="dt">Union</span>                  set  <span class="dt">Out</span> <span class="ot">=</span> set</span>
+<span id="cb20-7"><a href="#cb20-7"></a></span>
+<span id="cb20-8"><a href="#cb20-8"></a>setOperation    <span class="dt">Intersection</span>           <span class="dt">In</span>   set <span class="ot">=</span> set</span>
+<span id="cb20-9"><a href="#cb20-9"></a>setOperation    <span class="dt">Intersection</span>           <span class="dt">Out</span>  set <span class="ot">=</span> <span class="dt">Out</span></span>
+<span id="cb20-10"><a href="#cb20-10"></a>setOperation    <span class="dt">Intersection</span>           set  <span class="dt">In</span>  <span class="ot">=</span> set</span>
+<span id="cb20-11"><a href="#cb20-11"></a>setOperation    <span class="dt">Intersection</span>           set  <span class="dt">Out</span> <span class="ot">=</span> <span class="dt">Out</span></span>
+<span id="cb20-12"><a href="#cb20-12"></a></span>
+<span id="cb20-13"><a href="#cb20-13"></a>setOperation    <span class="dt">Difference</span>             <span class="dt">In</span>   set <span class="ot">=</span> cmp set</span>
+<span id="cb20-14"><a href="#cb20-14"></a>setOperation    <span class="dt">Difference</span>             <span class="dt">Out</span>  set <span class="ot">=</span> <span class="dt">Out</span></span>
+<span id="cb20-15"><a href="#cb20-15"></a>setOperation    <span class="dt">Difference</span>             set  <span class="dt">In</span>  <span class="ot">=</span> <span class="dt">Out</span></span>
+<span id="cb20-16"><a href="#cb20-16"></a>setOperation    <span class="dt">Difference</span>             set  <span class="dt">Out</span> <span class="ot">=</span> set</span>
+<span id="cb20-17"><a href="#cb20-17"></a></span>
+<span id="cb20-18"><a href="#cb20-18"></a>setOperation    <span class="dt">SymmetricDifference</span>    <span class="dt">In</span>   set <span class="ot">=</span> cmp set</span>
+<span id="cb20-19"><a href="#cb20-19"></a>setOperation    <span class="dt">SymmetricDifference</span>    <span class="dt">Out</span>  set <span class="ot">=</span> set</span>
+<span id="cb20-20"><a href="#cb20-20"></a>setOperation    <span class="dt">SymmetricDifference</span>    set  <span class="dt">In</span>  <span class="ot">=</span> cmp set</span>
+<span id="cb20-21"><a href="#cb20-21"></a>setOperation    <span class="dt">SymmetricDifference</span>    set  <span class="dt">Out</span> <span class="ot">=</span> set</span></code></pre></div>
 <p>Putting it together: for nodes we partition the second node by the splitting plane of the first, then recursively merge corresponding subparts and subtrees. For leaves we apply the <code>setOperation</code>.</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">mergeBSPs op (<span class="dt">Node</span> treeL p treeR) nodeR<span class="fu">@</span>(<span class="dt">Node</span> _ f _) <span class="fu">=</span>
-    collapse <span class="fu">$</span> <span class="dt">Node</span> mTreeL p mTreeR
-    <span class="kw">where</span>
-    regions <span class="fu">=</span> splitRegion f universeBox
-    (partL, partR) <span class="fu">=</span> partitionBSP regions p nodeR
-    mTreeL <span class="fu">=</span> mergeBSPs op treeL partL
-    mTreeR <span class="fu">=</span> mergeBSPs op treeR partR
-mergeBSPs op s1 s2 <span class="fu">=</span> setOperation op s1 s2
-
-<span class="ot">collapse ::</span> <span class="dt">BSP</span> n <span class="ot">-&gt;</span> <span class="dt">BSP</span> n
-collapse (<span class="dt">Node</span> <span class="dt">In</span>  _ <span class="dt">In</span> ) <span class="fu">=</span> <span class="dt">In</span>
-collapse (<span class="dt">Node</span> <span class="dt">Out</span> _ <span class="dt">Out</span>) <span class="fu">=</span> <span class="dt">Out</span>
-collapse other            <span class="fu">=</span> other</code></pre></div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb21-1"><a href="#cb21-1"></a>mergeBSPs op (<span class="dt">Node</span> treeL p treeR) nodeR<span class="op">@</span>(<span class="dt">Node</span> _ f _) <span class="ot">=</span></span>
+<span id="cb21-2"><a href="#cb21-2"></a>    collapse <span class="op">$</span> <span class="dt">Node</span> mTreeL p mTreeR</span>
+<span id="cb21-3"><a href="#cb21-3"></a>    <span class="kw">where</span></span>
+<span id="cb21-4"><a href="#cb21-4"></a>    regions <span class="ot">=</span> splitRegion f universeBox</span>
+<span id="cb21-5"><a href="#cb21-5"></a>    (partL, partR) <span class="ot">=</span> partitionBSP regions p nodeR</span>
+<span id="cb21-6"><a href="#cb21-6"></a>    mTreeL <span class="ot">=</span> mergeBSPs op treeL partL</span>
+<span id="cb21-7"><a href="#cb21-7"></a>    mTreeR <span class="ot">=</span> mergeBSPs op treeR partR</span>
+<span id="cb21-8"><a href="#cb21-8"></a>mergeBSPs op s1 s2 <span class="ot">=</span> setOperation op s1 s2</span>
+<span id="cb21-9"><a href="#cb21-9"></a></span>
+<span id="cb21-10"><a href="#cb21-10"></a><span class="ot">collapse ::</span> <span class="dt">BSP</span> n <span class="ot">-&gt;</span> <span class="dt">BSP</span> n</span>
+<span id="cb21-11"><a href="#cb21-11"></a>collapse (<span class="dt">Node</span> <span class="dt">In</span>  _ <span class="dt">In</span> ) <span class="ot">=</span> <span class="dt">In</span></span>
+<span id="cb21-12"><a href="#cb21-12"></a>collapse (<span class="dt">Node</span> <span class="dt">Out</span> _ <span class="dt">Out</span>) <span class="ot">=</span> <span class="dt">Out</span></span>
+<span id="cb21-13"><a href="#cb21-13"></a>collapse other            <span class="ot">=</span> other</span></code></pre></div>
 <p>Additionally we are also applying a small optimization to the resulting BSP: if the resulting subtrees after merging contain nodes with leaves of the same color we will simply <code>collapse</code> such node. There is also another type of optimization to the shape of the resulting BSP after merging. As you can see in the diagram below, the plane with label <span class="math inline">\(4\)</span> is handled by the <code>collapse</code> function but the <span class="math inline">\(0\)</span> node is also unnecessary. To get rid of it we have to determine if that plane is part of the resulting boundary and if not trim it. To check if a splitting plane (or rather facet) is laying on the boundary of the resulting polytope we recursively split such facet by the sub parts of the tree and check if any part of that facet make it to the green leaf. Also we only perform trimming for the one-sided nodes, since for internal nodes it would be a bother and probably much better to just split such tree in two. We simply ignore such case for now.</p>
-<div class="figure">
-<img src="../images/trim.png" />
-
-</div>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">isBoundary ::</span> <span class="dt">Clip</span> b v n <span class="ot">=&gt;</span> <span class="dt">BSP</span> (<span class="dt">Facet</span> b v n) <span class="ot">-&gt;</span> <span class="dt">Facet</span> b v n <span class="ot">-&gt;</span> <span class="dt">Bool</span>
-isBoundary <span class="dt">In</span>  _ <span class="fu">=</span> <span class="dt">True</span>
-isBoundary <span class="dt">Out</span> _ <span class="fu">=</span> <span class="dt">False</span>
-isBoundary (<span class="dt">Node</span> l s r) f <span class="fu">=</span> lcnd <span class="fu">||</span> rcnd
-    <span class="kw">where</span>
-    (lh, rh) <span class="fu">=</span> splitFacet (facetPlane s) f
-    lcnd <span class="fu">=</span> fromMaybe <span class="dt">False</span> (isBoundary l <span class="fu">&lt;$&gt;</span> lh)
-    rcnd <span class="fu">=</span> fromMaybe <span class="dt">False</span> (isBoundary r <span class="fu">&lt;$&gt;</span> rh)
-
-<span class="ot">trim ::</span> <span class="dt">Clip</span> b v n <span class="ot">=&gt;</span> <span class="dt">BSP</span> (<span class="dt">Facet</span> b v n) <span class="ot">-&gt;</span> <span class="dt">BSP</span> (<span class="dt">Facet</span> b v n)
-trim (<span class="dt">Node</span> <span class="dt">Out</span> f r)
-    <span class="fu">|</span> isBoundary r f <span class="fu">=</span> <span class="dt">Node</span> <span class="dt">Out</span> f (trim r)
-    <span class="fu">|</span> otherwise     <span class="fu">=</span> trim r
-trim (<span class="dt">Node</span> l f <span class="dt">Out</span>)
-    <span class="fu">|</span> isBoundary l f <span class="fu">=</span> <span class="dt">Node</span> (trim l) f <span class="dt">Out</span>
-    <span class="fu">|</span> otherwise     <span class="fu">=</span> trim l
-trim other <span class="fu">=</span> other</code></pre></div>
-<p>Again this could probably be optimized with the precomputed regions that I've mentioned previously.</p>
+<p><img src="../images/trim.png" /></p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb22-1"><a href="#cb22-1"></a><span class="ot">isBoundary ::</span> <span class="dt">Clip</span> b v n <span class="ot">=&gt;</span> <span class="dt">BSP</span> (<span class="dt">Facet</span> b v n) <span class="ot">-&gt;</span> <span class="dt">Facet</span> b v n <span class="ot">-&gt;</span> <span class="dt">Bool</span></span>
+<span id="cb22-2"><a href="#cb22-2"></a>isBoundary <span class="dt">In</span>  _ <span class="ot">=</span> <span class="dt">True</span></span>
+<span id="cb22-3"><a href="#cb22-3"></a>isBoundary <span class="dt">Out</span> _ <span class="ot">=</span> <span class="dt">False</span></span>
+<span id="cb22-4"><a href="#cb22-4"></a>isBoundary (<span class="dt">Node</span> l s r) f <span class="ot">=</span> lcnd <span class="op">||</span> rcnd</span>
+<span id="cb22-5"><a href="#cb22-5"></a>    <span class="kw">where</span></span>
+<span id="cb22-6"><a href="#cb22-6"></a>    (lh, rh) <span class="ot">=</span> splitFacet (facetPlane s) f</span>
+<span id="cb22-7"><a href="#cb22-7"></a>    lcnd <span class="ot">=</span> fromMaybe <span class="dt">False</span> (isBoundary l <span class="op">&lt;$&gt;</span> lh)</span>
+<span id="cb22-8"><a href="#cb22-8"></a>    rcnd <span class="ot">=</span> fromMaybe <span class="dt">False</span> (isBoundary r <span class="op">&lt;$&gt;</span> rh)</span>
+<span id="cb22-9"><a href="#cb22-9"></a></span>
+<span id="cb22-10"><a href="#cb22-10"></a><span class="ot">trim ::</span> <span class="dt">Clip</span> b v n <span class="ot">=&gt;</span> <span class="dt">BSP</span> (<span class="dt">Facet</span> b v n) <span class="ot">-&gt;</span> <span class="dt">BSP</span> (<span class="dt">Facet</span> b v n)</span>
+<span id="cb22-11"><a href="#cb22-11"></a>trim (<span class="dt">Node</span> <span class="dt">Out</span> f r)</span>
+<span id="cb22-12"><a href="#cb22-12"></a>    <span class="op">|</span> isBoundary r f <span class="ot">=</span> <span class="dt">Node</span> <span class="dt">Out</span> f (trim r)</span>
+<span id="cb22-13"><a href="#cb22-13"></a>    <span class="op">|</span> <span class="fu">otherwise</span>     <span class="ot">=</span> trim r</span>
+<span id="cb22-14"><a href="#cb22-14"></a>trim (<span class="dt">Node</span> l f <span class="dt">Out</span>)</span>
+<span id="cb22-15"><a href="#cb22-15"></a>    <span class="op">|</span> isBoundary l f <span class="ot">=</span> <span class="dt">Node</span> (trim l) f <span class="dt">Out</span></span>
+<span id="cb22-16"><a href="#cb22-16"></a>    <span class="op">|</span> <span class="fu">otherwise</span>     <span class="ot">=</span> trim l</span>
+<span id="cb22-17"><a href="#cb22-17"></a>trim other <span class="ot">=</span> other</span></code></pre></div>
+<p>Again this could probably be optimized with the precomputed regions that I’ve mentioned previously.</p>
 <h4 id="boundary-reconstruction">Boundary reconstruction</h4>
 <p>A straightforward (as in: it was literally the first idea that come to my mind) way to reconstruct the boundary from a BSP is as follows:</p>
-<ol style="list-style-type: decimal">
+<ol type="1">
 <li>Collect all planes of the BSP,</li>
 <li>Turn them all to facets (by clipping them to the Universe Box),</li>
 <li>Color all of them by leaves of the BSP,</li>
 <li>Flip all of resulting facets,</li>
-<li>Color them again and keep only the ones that had different colors on pass 5 then on pass 3 (We should also flip the facet if it's Green after Red to have properly oriented normals of the boundary).</li>
+<li>Color them again and keep only the ones that had different colors on pass 5 then on pass 3 (We should also flip the facet if it’s Green after Red to have properly oriented normals of the boundary).</li>
 </ol>
 <p>Here it is in Haskell:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">toBoundary bsp
-    <span class="fu">=</span> removeColors bsp        <span class="co">-- 5.</span>
-    <span class="fu">.</span> map (over _2 flipPlane) <span class="co">-- 4.</span>
-    <span class="fu">.</span> applyColors bsp         <span class="co">-- 3.</span>
-    <span class="fu">.</span> map toFacet             <span class="co">-- 2.</span>
-    <span class="fu">$</span> destructBinaryTree bsp  <span class="co">-- 1.</span>
-
-applyColors bsp xs <span class="fu">=</span> go xs bsp []
-    <span class="kw">where</span>
-    go [] _   <span class="fu">=</span> id
-    go fs <span class="dt">In</span>  <span class="fu">=</span> foldr (\f cs <span class="ot">-&gt;</span> ((<span class="dt">True</span> , f)<span class="fu">:</span>) <span class="fu">.</span> cs) id fs
-    go fs <span class="dt">Out</span> <span class="fu">=</span> foldr (\f cs <span class="ot">-&gt;</span> ((<span class="dt">False</span>, f)<span class="fu">:</span>) <span class="fu">.</span> cs) id fs
-    go fs (<span class="dt">Node</span> l s r) <span class="fu">=</span> go ls l <span class="fu">.</span> go rs r
-        <span class="kw">where</span>
-        (ls, rs) <span class="fu">=</span> splitWith (splitFacet s) fs
-
-removeColors bsp xs <span class="fu">=</span> go xs bsp []
-    <span class="kw">where</span>
-    go [] _   <span class="fu">=</span> id
-    go fs <span class="dt">In</span>  <span class="fu">=</span> foldr (\(a,b) cs <span class="ot">-&gt;</span> <span class="kw">if</span> not a <span class="kw">then</span> (b<span class="fu">:</span>) <span class="fu">.</span> cs <span class="kw">else</span> cs) id fs
-    go fs <span class="dt">Out</span> <span class="fu">=</span> foldr (\(a,b) cs <span class="ot">-&gt;</span> <span class="kw">if</span>     a <span class="kw">then</span> (b<span class="fu">:</span>) <span class="fu">.</span> cs <span class="kw">else</span> cs) id fs
-    go fs (<span class="dt">Node</span> l s r) <span class="fu">=</span> go ls l <span class="fu">.</span> go rs r
-        <span class="kw">where</span>
-        (ls, rs) <span class="fu">=</span> splitWith coloredSplit fs
-        coloredSplit (b, f) <span class="fu">=</span> over each (fmap (b,)) <span class="fu">$</span> splitFacet s f</code></pre></div>
-<p>Suffice to say, thats not very fast. If we where to implement the optimization from the previous section where we were holding the precomputed regions within tree nodes, we could simply collect all the regions corresponding to <code>Green</code> leaves and we would have something close to a boundary. Close, because really it would be a list of convex polytopes making the full (potentially concave) polytope when put together. And, of course, such representation could be advantageous in some context (like for example collision detection) and there would be no difference how it looks (especially if we don't look inside) but it's not exactly what we want. So then to correct that we would need to localize all of the internal facets lower them a dimension and preform a symmetric difference between them, or something... anyway it feels like whole another can of worms. Generally speaking I'm not happy about it all. Yeah, I have some other ideas about how to make boundary reconstruction work but I will probably have to investigate that further. And once I do that I'll probably write a follow up on that also, however for now, not having to do any reconstruction at all - as it is the case with Boundary Filtering approach - is definitely a win in my books.</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb23-1"><a href="#cb23-1"></a>toBoundary bsp</span>
+<span id="cb23-2"><a href="#cb23-2"></a>    <span class="ot">=</span> removeColors bsp        <span class="co">-- 5.</span></span>
+<span id="cb23-3"><a href="#cb23-3"></a>    <span class="op">.</span> <span class="fu">map</span> (over _2 flipPlane) <span class="co">-- 4.</span></span>
+<span id="cb23-4"><a href="#cb23-4"></a>    <span class="op">.</span> applyColors bsp         <span class="co">-- 3.</span></span>
+<span id="cb23-5"><a href="#cb23-5"></a>    <span class="op">.</span> <span class="fu">map</span> toFacet             <span class="co">-- 2.</span></span>
+<span id="cb23-6"><a href="#cb23-6"></a>    <span class="op">$</span> destructBinaryTree bsp  <span class="co">-- 1.</span></span>
+<span id="cb23-7"><a href="#cb23-7"></a></span>
+<span id="cb23-8"><a href="#cb23-8"></a>applyColors bsp xs <span class="ot">=</span> go xs bsp []</span>
+<span id="cb23-9"><a href="#cb23-9"></a>    <span class="kw">where</span></span>
+<span id="cb23-10"><a href="#cb23-10"></a>    go [] _   <span class="ot">=</span> <span class="fu">id</span></span>
+<span id="cb23-11"><a href="#cb23-11"></a>    go fs <span class="dt">In</span>  <span class="ot">=</span> <span class="fu">foldr</span> (\f cs <span class="ot">-&gt;</span> ((<span class="dt">True</span> , f)<span class="op">:</span>) <span class="op">.</span> cs) <span class="fu">id</span> fs</span>
+<span id="cb23-12"><a href="#cb23-12"></a>    go fs <span class="dt">Out</span> <span class="ot">=</span> <span class="fu">foldr</span> (\f cs <span class="ot">-&gt;</span> ((<span class="dt">False</span>, f)<span class="op">:</span>) <span class="op">.</span> cs) <span class="fu">id</span> fs</span>
+<span id="cb23-13"><a href="#cb23-13"></a>    go fs (<span class="dt">Node</span> l s r) <span class="ot">=</span> go ls l <span class="op">.</span> go rs r</span>
+<span id="cb23-14"><a href="#cb23-14"></a>        <span class="kw">where</span></span>
+<span id="cb23-15"><a href="#cb23-15"></a>        (ls, rs) <span class="ot">=</span> splitWith (splitFacet s) fs</span>
+<span id="cb23-16"><a href="#cb23-16"></a></span>
+<span id="cb23-17"><a href="#cb23-17"></a>removeColors bsp xs <span class="ot">=</span> go xs bsp []</span>
+<span id="cb23-18"><a href="#cb23-18"></a>    <span class="kw">where</span></span>
+<span id="cb23-19"><a href="#cb23-19"></a>    go [] _   <span class="ot">=</span> <span class="fu">id</span></span>
+<span id="cb23-20"><a href="#cb23-20"></a>    go fs <span class="dt">In</span>  <span class="ot">=</span> <span class="fu">foldr</span> (\(a,b) cs <span class="ot">-&gt;</span> <span class="kw">if</span> <span class="fu">not</span> a <span class="kw">then</span> (b<span class="op">:</span>) <span class="op">.</span> cs <span class="kw">else</span> cs) <span class="fu">id</span> fs</span>
+<span id="cb23-21"><a href="#cb23-21"></a>    go fs <span class="dt">Out</span> <span class="ot">=</span> <span class="fu">foldr</span> (\(a,b) cs <span class="ot">-&gt;</span> <span class="kw">if</span>     a <span class="kw">then</span> (b<span class="op">:</span>) <span class="op">.</span> cs <span class="kw">else</span> cs) <span class="fu">id</span> fs</span>
+<span id="cb23-22"><a href="#cb23-22"></a>    go fs (<span class="dt">Node</span> l s r) <span class="ot">=</span> go ls l <span class="op">.</span> go rs r</span>
+<span id="cb23-23"><a href="#cb23-23"></a>        <span class="kw">where</span></span>
+<span id="cb23-24"><a href="#cb23-24"></a>        (ls, rs) <span class="ot">=</span> splitWith coloredSplit fs</span>
+<span id="cb23-25"><a href="#cb23-25"></a>        coloredSplit (b, f) <span class="ot">=</span> over each (<span class="fu">fmap</span> (b,)) <span class="op">$</span> splitFacet s f</span></code></pre></div>
+<p>Suffice to say, thats not very fast. If we where to implement the optimization from the previous section where we were holding the precomputed regions within tree nodes, we could simply collect all the regions corresponding to <code>Green</code> leaves and we would have something close to a boundary. Close, because really it would be a list of convex polytopes making the full (potentially concave) polytope when put together. And, of course, such representation could be advantageous in some context (like for example collision detection) and there would be no difference how it looks (especially if we don’t look inside) but it’s not exactly what we want. So then to correct that we would need to localize all of the internal facets lower them a dimension and preform a symmetric difference between them, or something… anyway it feels like whole another can of worms. Generally speaking I’m not happy about it all. Yeah, I have some other ideas about how to make boundary reconstruction work but I will probably have to investigate that further. And once I do that I’ll probably write a follow up on that also, however for now, not having to do any reconstruction at all - as it is the case with Boundary Filtering approach - is definitely a win in my books.</p>
 <h3 id="boundary-representation">Boundary representation</h3>
-<p>There are many ways to to represent boundary of a polytope and as I haven't, as of yet, found a dimensionally polymorphic way that I'm satisfied with and since this is not really the subject of this post I decided to ignore this problem for now, or rather work around it with a <code>FromPolytopeRep</code> and <code>ToPolytopeRep</code> type classes of the form:</p>
-<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">class</span> <span class="dt">FromPolytopeRep</span> p b v n <span class="kw">where</span>
-<span class="ot">    fromPolytopeRep ::</span> p v n <span class="ot">-&gt;</span> [<span class="dt">Facet</span> b v n]
-
-<span class="kw">class</span> <span class="dt">ToPolytopeRep</span> p b v n <span class="kw">where</span>
-<span class="ot">    toPolytopeRep ::</span> [<span class="dt">Facet</span> b v n] <span class="ot">-&gt;</span> p v n</code></pre></div>
-<p>And then provide specific instances on demand. One of the obvious representations for the three dimensional case being indexed list of triangles for which implementation of instances of these classes isn't particularly enlightening so I'll leave it at that.</p>
+<p>There are many ways to to represent boundary of a polytope and as I haven’t, as of yet, found a dimensionally polymorphic way that I’m satisfied with and since this is not really the subject of this post I decided to ignore this problem for now, or rather work around it with a <code>FromPolytopeRep</code> and <code>ToPolytopeRep</code> type classes of the form:</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span id="cb24-1"><a href="#cb24-1"></a><span class="kw">class</span> <span class="dt">FromPolytopeRep</span> p b v n <span class="kw">where</span></span>
+<span id="cb24-2"><a href="#cb24-2"></a><span class="ot">    fromPolytopeRep ::</span> p v n <span class="ot">-&gt;</span> [<span class="dt">Facet</span> b v n]</span>
+<span id="cb24-3"><a href="#cb24-3"></a></span>
+<span id="cb24-4"><a href="#cb24-4"></a><span class="kw">class</span> <span class="dt">ToPolytopeRep</span> p b v n <span class="kw">where</span></span>
+<span id="cb24-5"><a href="#cb24-5"></a><span class="ot">    toPolytopeRep ::</span> [<span class="dt">Facet</span> b v n] <span class="ot">-&gt;</span> p v n</span></code></pre></div>
+<p>And then provide specific instances on demand. One of the obvious representations for the three dimensional case being indexed list of triangles for which implementation of instances of these classes isn’t particularly enlightening so I’ll leave it at that.</p>
 <h3 id="moving-to-n-dimensions">Moving to N-Dimensions</h3>
-<p>Throughout this post (and in the title) I was using a dimensionally general language, yet in the actual implementation up until now I've only dealt with two and three dimensions. Or rather most of this code is dimensionally polymorphic and the thing that is missing is N-Dimensional facet boundary representation and splitting so let me address that in this section.</p>
-<p>As I've mentioned in the section on facet splitting, for a fully general boundary representation what we really need is a graph with nodes being <code>CrossPoint</code>s and edges <span class="math inline">\(n-1\)</span> vectors of planes. When you think about splitting such topological graph with a plane, at first it seems easy. You calculate signs of all <code>CrossPoint</code>s relative to the splitting plane, for the edges that connect nodes with opposite signs we create new points <span class="math inline">\(N\)</span>. Next you return all of <span class="math inline">\(P\)</span> nodes to the positive side and <span class="math inline">\(M\)</span> to the negative side. <span class="math inline">\(Z\)</span> and <span class="math inline">\(N\)</span> go to both sides. For edges you do a similar procedure. However here comes trouble; we also need to construct new edges that connect new(<span class="math inline">\(N\)</span>) and split(<span class="math inline">\(Z\)</span>) points. A solution to that I've found is to change the representation of <code>Plane</code> and <code>CrossPoint</code> to include hash of coefficients and set of plane hashes respectively (I've mentioned that briefly in the section about merging BSPs). If we additionally assume that we are dealing with convex boundaries, reconstructing missing edges is rather trivial.</p>
-<p>That solution seems somewhat unsatisfactory for me but since I haven't as of yet found more natural one, I'll leave it at that for now.</p>
-<p>Another thing that I should probably mention in this section (or rather answer) is why? Why would we ever need more then three dimensions? Well for me the obvious answer is because I can, but that's probably not enough for majority of people so here's a couple of applications: One - collision detection under translation. Similarly how in 2d we can create a polyhedron, by connecting polygon in now position with one at <span class="math inline">\(\delta t\)</span> using <span class="math inline">\(z\)</span> axis for time and doing an intersection with another such time extruded polygon. Now the vertices with the lowest value of <span class="math inline">\(t\)</span> in that intersection are the time and place of collision. And if we use rational numbers we could calculate exact time and place. Equally for collisions in 3d we would need to perform the intersections of time extruded polyhedra in 4d. So that's one application. Of course if we would also like to have rotation we would probably need to add non-linears and that's not fun. It probably wouldn't be the most efficient collision detection algorithm anyway, but it's something to ponder. Another application could be knowledge sets. Each dimension being a spectrum of some characteristic giving sets representing some more complex concepts. This representation however limits us to binary logic where something more fuzzy would probably be more applicable. Also I don't believe this could scale well above handful of dimensions and probably anything remotely useful would require more then that.</p>
+<p>Throughout this post (and in the title) I was using a dimensionally general language, yet in the actual implementation up until now I’ve only dealt with two and three dimensions. Or rather most of this code is dimensionally polymorphic and the thing that is missing is N-Dimensional facet boundary representation and splitting so let me address that in this section.</p>
+<p>As I’ve mentioned in the section on facet splitting, for a fully general boundary representation what we really need is a graph with nodes being <code>CrossPoint</code>s and edges <span class="math inline">\(n-1\)</span> vectors of planes. When you think about splitting such topological graph with a plane, at first it seems easy. You calculate signs of all <code>CrossPoint</code>s relative to the splitting plane, for the edges that connect nodes with opposite signs we create new points <span class="math inline">\(N\)</span>. Next you return all of <span class="math inline">\(P\)</span> nodes to the positive side and <span class="math inline">\(M\)</span> to the negative side. <span class="math inline">\(Z\)</span> and <span class="math inline">\(N\)</span> go to both sides. For edges you do a similar procedure. However here comes trouble; we also need to construct new edges that connect new(<span class="math inline">\(N\)</span>) and split(<span class="math inline">\(Z\)</span>) points. A solution to that I’ve found is to change the representation of <code>Plane</code> and <code>CrossPoint</code> to include hash of coefficients and set of plane hashes respectively (I’ve mentioned that briefly in the section about merging BSPs). If we additionally assume that we are dealing with convex boundaries, reconstructing missing edges is rather trivial.</p>
+<p>That solution seems somewhat unsatisfactory for me but since I haven’t as of yet found more natural one, I’ll leave it at that for now.</p>
+<p>Another thing that I should probably mention in this section (or rather answer) is why? Why would we ever need more then three dimensions? Well for me the obvious answer is because I can, but that’s probably not enough for majority of people so here’s a couple of applications: One - collision detection under translation. Similarly how in 2d we can create a polyhedron, by connecting polygon in now position with one at <span class="math inline">\(\delta t\)</span> using <span class="math inline">\(z\)</span> axis for time and doing an intersection with another such time extruded polygon. Now the vertices with the lowest value of <span class="math inline">\(t\)</span> in that intersection are the time and place of collision. And if we use rational numbers we could calculate exact time and place. Equally for collisions in 3d we would need to perform the intersections of time extruded polyhedra in 4d. So that’s one application. Of course if we would also like to have rotation we would probably need to add non-linears and that’s not fun. It probably wouldn’t be the most efficient collision detection algorithm anyway, but it’s something to ponder. Another application could be knowledge sets. Each dimension being a spectrum of some characteristic giving sets representing some more complex concepts. This representation however limits us to binary logic where something more fuzzy would probably be more applicable. Also I don’t believe this could scale well above handful of dimensions and probably anything remotely useful would require more then that.</p>
 <h3 id="concluding-remarks">Concluding Remarks</h3>
-<p>I have presented an algorithm (algorithms) and implementation of Boolean Operations on Linear Sets. Obviously there are quite a lot of opportunities for optimization as I've sketched within this post and there is more exploration needed when it comes to higher dimensions. One particular vector of attack with regards to speed that I would love to explore is through (ab)use of GPU via <a href="https://github.com/AccelerateHS/accelerate/">accelerate</a>. Even though accelerate doesn't, as of yet, support nested data parallelism it could still be enjoyable to play with and so probably that will be the next thing I'll be doing when it comes to this project. Another thing that could be useful - from the point of user of this library - would be some sort of abstraction for incremental evaluation of expression trees, so that the user could get some feedback irregardless of the size and complexity of the expression, without having to &quot;stop the world&quot; for some unspecified amount of time. That however is something much further in the future.</p>
-<p>One thing that surprised me when implementing this algorithm is that it is closed under rationals. Somehow I was convinced that it would be possible to construct a point with irrational components from planes specified with only rational coefficients. Don't really know where this belief came from, but I was surprised nonetheless. However since that is not the case, we can use that. Obviously we can calculate exact results with rational numbers (if we are patient enough), but we can also use that to QuickCheck properties that we are sure should be correct on linear sets without having to worry about numeric errors. I haven't really done that as of yet, but it's good to know that it is indeed the case.</p>
-<h3 id="afterword">Afterword</h3>
-<p>I am currently looking for a job. Since you have lasted up to this point it's a sign that you may be someone that I would enjoy to work with (for, under). Therefore if you'd like to hire me, please let me know:</p>
-<blockquote>
-<p><strong>Maksymilian.Owsianny@gmail.com</strong>.</p>
-</blockquote>
+<p>I have presented an algorithm (algorithms) and implementation of Boolean Operations on Linear Sets. Obviously there are quite a lot of opportunities for optimization as I’ve sketched within this post and there is more exploration needed when it comes to higher dimensions. One particular vector of attack with regards to speed that I would love to explore is through (ab)use of GPU via <a href="https://github.com/AccelerateHS/accelerate/">accelerate</a>. Even though accelerate doesn’t, as of yet, support nested data parallelism it could still be enjoyable to play with and so probably that will be the next thing I’ll be doing when it comes to this project. Another thing that could be useful - from the point of user of this library - would be some sort of abstraction for incremental evaluation of expression trees, so that the user could get some feedback irregardless of the size and complexity of the expression, without having to “stop the world” for some unspecified amount of time. That however is something much further in the future.</p>
+<p>One thing that surprised me when implementing this algorithm is that it is closed under rationals. Somehow I was convinced that it would be possible to construct a point with irrational components from planes specified with only rational coefficients. Don’t really know where this belief came from, but I was surprised nonetheless. However since that is not the case, we can use that. Obviously we can calculate exact results with rational numbers (if we are patient enough), but we can also use that to QuickCheck properties that we are sure should be correct on linear sets without having to worry about numeric errors. I haven’t really done that as of yet, but it’s good to know that it is indeed the case.</p>
 <hr />
-<div id="refs" class="references">
+<div id="refs" class="references" role="doc-bibliography">
 <div id="ref-tn87">
-<p>[<strong>TN87</strong>] <span style="font-variant: small-caps;">Thibault, W.C. and Naylor, B.F.</span> 1987. Set Operations on Polyhedra Using Binary Space Partitioning Trees. <em>SIGGRAPH Comput. Graph.</em> <em>21</em>, 4, 153–162.</p>
+<p>[<strong>TN87</strong>] <span class="smallcaps">Thibault, W.C. and Naylor, B.F.</span> 1987. Set Operations on Polyhedra Using Binary Space Partitioning Trees. <em>SIGGRAPH Comput. Graph.</em> <em>21</em>, 4, 153–162.</p>
 </div>
 <div id="ref-nat90">
-<p>[<strong>NAT90</strong>] <span style="font-variant: small-caps;">Naylor, B., Amanatides, J., and Thibault, W.</span> 1990. Merging BSP Trees Yields Polyhedral Set Operations. <em>SIGGRAPH Comput. Graph.</em> <em>24</em>, 4, 115–124.</p>
-</div>
-<div id="ref-she97">
-<p>[<strong>SHE97</strong>] <span style="font-variant: small-caps;">Shewchuk, J.R.</span> 1997. Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates. <em>Discrete &amp; Computational Geometry</em> <em>18</em>, 3, 305–363.</p>
+<p>[<strong>NAT90</strong>] <span class="smallcaps">Naylor, B., Amanatides, J., and Thibault, W.</span> 1990. Merging BSP Trees Yields Polyhedral Set Operations. <em>SIGGRAPH Comput. Graph.</em> <em>24</em>, 4, 115–124.</p>
 </div>
 <div id="ref-bf09">
-<p>[<strong>BF09</strong>] <span style="font-variant: small-caps;">Bernstein, G. and Fussell, D.</span> 2009. Fast, Exact, Linear Booleans. <em>Proceedings of the symposium on geometry processing</em>, Eurographics Association, 1269–1278.</p>
+<p>[<strong>BF09</strong>] <span class="smallcaps">Bernstein, G. and Fussell, D.</span> 2009. Fast, Exact, Linear Booleans. <em>Proceedings of the symposium on geometry processing</em>, Eurographics Association, 1269–1278.</p>
+</div>
+<div id="ref-she97">
+<p>[<strong>SHE97</strong>] <span class="smallcaps">Shewchuk, J.R.</span> Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates. <em>Discrete &amp; Computational Geometry</em> <em>18</em>, 3, 305–363.</p>
 </div>
 </div>
 </div>
